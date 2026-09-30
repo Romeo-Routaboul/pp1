@@ -1,21 +1,42 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PP1</title>
+    <title>Inicio - PP1</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 2rem;
+        }
+
+        .botones {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .boton {
+            background-color: #2563eb;
+            border-radius: 0.4rem;
+            color: white;
+            padding: 0.7rem 1rem;
+            text-decoration: none;
+        }
+
+        .boton:hover {
+            background-color: #1d4ed8;
+        }
+    </style>
 </head>
 <body>
     <h1>Inicio</h1>
-    <p>iniciar sesion</p>
-    <form action="/enviar" method="POST">
-    <label for="username">username:</label>
-    <input type="text" id="username" name="username" required>
-
-    <label for="password">Contraseña:</label>
-    <input type="password" id="password" name="password" required>
-
-    <button type="submit">Enviar</button>
-</form>
+    <p>Seleccioná tu perfil:</p>
+    <nav class="botones" aria-label="Perfiles">
+        <a class="boton" href="perfiles/perfilInvitado/perfil.html">Soy invitado</a>
+        <a class="boton" href="perfiles/perfilAnfitrion/perfil.html">Soy anfitrión</a>
+        <a class="boton" href="perfiles/perfilAdminstrador/perfil.html">Soy administrador</a>
+    </nav>
 </body>
 </html>
