@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de regalos</title>
+</head>
+<body>
+
+    <h1>Mi lista de regalos</h1>
+
+    <label for="regalo">Escribí un regalo:</label>
+    <input type="text" id="regalo">
+
+    <button onclick="agregarRegalo()">Agregar</button>
+
+    <h2>Regalos que quiero recibir:</h2>
+
+    <ul id="listaRegalos">
+        <li>Juego de sabanas king size <button onclick="this.parentElement.remove()" >Eliminar</button></li>
+        <li>set de platos <button onclick="this.parentElement.remove()" >Eliminar</button></li> 
+        <li>set de cubiertos <button onclick="this.parentElement.remove()" >Eliminar</button></li>
+        <li>TV 43 pulgadas <button onclick="this.parentElement.remove()" >Eliminar</button></li>
+        <li>Playstation 5 <button onclick="this.parentElement.remove()" >Eliminar</button></li>
+        <li>Computadora portatil <button onclick="this.parentElement.remove()" >Eliminar</button></li>
+        <li>Afeitadora electrica <button onclick="this.parentElement.remove()" >Eliminar</button></li>
+        <li>Cafetera espresso <button onclick="this.parentElement.remove()" >Eliminar</button></li>
+        <li>molinillo de café <button onclick="this.parentElement.remove()" >Eliminar</button></li>
+    </ul>
+
+    <script>
+        function agregarRegalo() {
+            let input = document.getElementById("regalo");
+            let regalo = input.value;
+
+            if (regalo !== "") {
+
+                let nuevoRegalo = document.createElement("li");
+
+                nuevoRegalo.textContent = regalo;
+
+                let botonEliminar = document.createElement("button");
+
+                botonEliminar.textContent = "Eliminar";
+
+                botonEliminar.onclick = function() {
+                    nuevoRegalo.remove();
+                };
+
+                nuevoRegalo.appendChild(botonEliminar);
+
+                document.getElementById("listaRegalos").appendChild(nuevoRegalo);
+
+                input.value = "";
+            }
+        }
+    </script>
+    <footer> <a href="../perfil.html">Volver atras</a> </footer> </body> </html>
+</body>
+</html>
+
