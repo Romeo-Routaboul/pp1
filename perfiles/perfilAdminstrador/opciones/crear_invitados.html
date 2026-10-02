@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Invitados - PP1</title>
+</head>
+<body>
+    <header>
+        <h1>Gestión de Invitados</h1>
+        <p>Agrega o elimina invitados para tu evento.</p>
+    </header>
+
+```
+<main>
+    <!-- Formulario para agregar invitado -->
+    <section>
+        <h2>Agregar invitado</h2>
+
+        <form id="form-invitado">
+
+            <label for="nombre-invitado">Nombre:</label>
+            <input 
+                type="text" 
+                id="nombre-invitado" 
+                name="nombre" 
+                placeholder="Ej: Juan" 
+                required
+            >
+
+
+            <label for="apellido-invitado">Apellido:</label>
+            <input 
+                type="text" 
+                id="apellido-invitado" 
+                name="apellido" 
+                placeholder="Ej: Pérez" 
+                required
+            >
+
+            <br><br>
+
+             <label for="email-invitado">Email:</label>
+            <input 
+                type="email" 
+                id="email-invitado" 
+                name="email" 
+                placeholder="Ej: juanperez@gmail.com" 
+                required
+            >
+
+             <label for="password-invitado">Contraseña:</label>
+            <input 
+                type="password" 
+                id="password-invitado" 
+                name="password" 
+                required
+
+
+            >
+            <br>
+            <button type="submit">Agregar</button>
+        </form>
+    </section>
+
+    <!-- Lista donde se mostrarán los invitados -->
+    <section>
+        <h2>Lista de invitados actuales</h2>
+        <ul id="lista-invitados">
+            <!-- Los invitados se cargarán aquí automáticamente -->
+        </ul>
+    </section>
+</main>
+
+<footer>
+    <br>
+    <a href="../perfil.html">Volver al menú del anfitrión</a>
+</footer>
+
+<!-- Script de funcionalidad en JavaScript -->
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const form = document.getElementById("form-invitado");
+        const inputNombre = document.getElementById("nombre-invitado");
+        const inputApellido = document.getElementById("apellido-invitado");
+        const listaInvitados = document.getElementById("lista-invitados");
+ 
+        // Cargar invitados guardados previamente
+        let invitados = JSON.parse(localStorage.getItem("invitados")) || [];
+
+        function mostrarInvitados() {
+            listaInvitados.innerHTML = "";
+
+            if (invitados.length === 0) {
+                listaInvitados.innerHTML = "<li>No hay invitados cargados todavía.</li>";
+                return;
+            }
+
+            invitados.forEach((invitado, index) => {
+                const li = document.createElement("li");
+
+                li.innerHTML = `
+                    ${invitado.nombre} ${invitado.apellido}
+                    <button onclick="eliminarInvitado(${index})">Eliminar</button>
+                `;
+
+                listaInvitados.appendChild(li);
+            });
+        }
+
+        // Función para agregar invitado
+        form.addEventListener("submit", (e) => {
+            e.preventDefault();
+
+            const nombre = inputNombre.value.trim();
+            const apellido = inputApellido.value.trim();
+
+            if (nombre !== "" && apellido !== "") {
+
+                const invitado = {
+                    nombre: nombre,
+                    apellido: apellido
+                };
+
+                invitados.push(invitado);
+
+                localStorage.setItem("invitados", JSON.stringify(invitados));
+
+                inputNombre.value = "";
+                inputApellido.value = "";
+
+                mostrarInvitados();
+            }
+        });
+
+        // Función para eliminar invitado
+        window.eliminarInvitado = function(index) {
+            invitados.splice(index, 1);
+
+            localStorage.setItem("invitados", JSON.stringify(invitados));
+
+            mostrarInvitados();
+        };
+
+        // Mostrar la lista inicial al cargar la página
+        mostrarInvitados();
+    });
+</script>
+```
+
+</body>
+</html>
