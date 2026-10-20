@@ -8,20 +8,62 @@
 </head>
 <body>
     <h1>Inicio</h1>
-    <form>
+    <form id="login-form" action="/login" method="post">
     <label for="username">Nombre de usuario</label>
-    <input type="text" name="username" id="username" value="">
+    <input type="text" name="username" id="username" required>
         <br>
         <br>    
     <label for="password">contraseña</label>
-    <input type="password" name="password" id="password" value="">  
+    <input type="password" name="password" id="password" required>
+        <br>
+        <br>
+    <button type="submit">Iniciar sesión</button>
     </form>
-    <p>Seleccioná tu perfil:</p>
-    <nav class="botones" aria-label="Perfiles">
-        <a class="boton" href="/perfiles/perfilInvitado/perfil.html">Soy invitado</a>
-        <a class="boton" href="/perfiles/perfilAnfitrion/perfil.html">Soy anfitrión</a>
-        <a class="boton" href="/perfiles/perfilAdminstrador/crear_elegir_evento.html">Soy administrador</a>
-        <!-- probando -->
-    </nav>
+    <p id="login-message" role="status" aria-live="polite"></p>
+    <script>
+        const loginForm = document.getElementById("login-form");
+        const loginMessage = document.getElementById("login-message");
+        const profilePaths = {
+            invitado: "/perfiles/perfilInvitado/perfil.html",
+            anfitrion: "/perfiles/perfilAnfitrion/perfil.html",
+            "anfitrión": "/perfiles/perfilAnfitrion/perfil.html",
+            admin: "/perfiles/perfilAdminstrador/crear_elegir_evento.html",
+            administrador: "/perfiles/perfilAdminstrador/crear_elegir_evento.html",
+        };
+
+        loginForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            loginMessage.textContent = "Iniciando sesión...";
+
+            try {
+                const response = await fetch(loginForm.action, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        username: loginForm.elements.username.value,
+                        password: loginForm.elements.password.value,
+                    }),
+                });
+                const result = await response.json();
+                if (!response.ok) {
+                    loginMessage.textContent = result.detail || "No se pudo iniciar sesión.";
+                    return;
+                }
+
+                const role = typeof result.user?.role === "string"
+                    ? result.user.role.trim().toLowerCase()
+                    : "";
+                const profilePath = profilePaths[role];
+                if (!profilePath) {
+                    loginMessage.textContent = "La cuenta no tiene un perfil válido asignado.";
+                    return;
+                }
+
+                window.location.assign(profilePath);
+            } catch {
+                loginMessage.textContent = "No se pudo conectar con el servidor.";
+            }
+        });
+    </script>
 </body>
 </html>

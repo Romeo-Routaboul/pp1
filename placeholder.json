@@ -1,0 +1,22 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "Admin",
+      "password_hash": "pbkdf2_sha256$600000$e9bbfffa7492c88f13f74f4d93a940e9$49df537a5ee4967e4764d9faea9ba36b07a8fe8e3fcb274ea607785381292117",
+      "role": "admin"
+    },
+    {
+      "id": 2,
+      "username": "anfitrion",
+      "password_hash": "pbkdf2_sha256$600000$ea530a53a5f5270a581a352638a8e418$9b7535e411669b7b3e4291edfb3922808cd8cc884d9e5e15ecc03d17da143ca1",
+      "role": "anfitrion"
+    },
+    {
+      "id": 3,
+      "username": "invitado",
+      "password_hash": "pbkdf2_sha256$600000$76e24af8148153934f3b6266484eb8f6$6cba1baa8ad21d8f6f4fff8b9b32ad50dfb3fc374e1514a1b66b00b22eb2ed27",
+      "role": "invitado"
+    }
+  ]
+}
