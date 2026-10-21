@@ -1,9 +1,11 @@
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from python.eventos import EventNotFoundError, router as eventos_router
 from python.userLoginYRegist import (
 	DuplicateUsernameError,
 	InvalidCredentialsError,
@@ -13,11 +15,20 @@ from python.userLoginYRegist import (
 
 app = FastAPI()
 HTML_DIR = Path(__file__).resolve().parent / "html-css"
+app.include_router(eventos_router)
 
 
 class Credentials(BaseModel):
 	username: str = Field(min_length=1, max_length=64)
 	password: str = Field(min_length=1, max_length=1024)
+
+
+class UserRegistration(Credentials):
+	username: str = Field(min_length=1, max_length=254)
+	role: Literal["invitado", "anfitrion"] = "invitado"
+	event_id: int | None = Field(default=None, gt=0)
+	first_name: str | None = Field(default=None, max_length=80)
+	last_name: str | None = Field(default=None, max_length=80)
 
 
 def html_response(file_path: Path):
@@ -53,11 +64,20 @@ def login(credentials: Credentials):
 
 
 @app.post("/register", status_code=201)
-def register(credentials: Credentials):
+def register(credentials: UserRegistration):
 	try:
-		user = register_user(credentials.username, credentials.password)
+		user = register_user(
+			credentials.username,
+			credentials.password,
+			credentials.role,
+			credentials.event_id,
+			credentials.first_name,
+			credentials.last_name,
+		)
 	except DuplicateUsernameError as error:
 		raise HTTPException(status_code=409, detail="El nombre de usuario ya está registrado.") from error
+	except EventNotFoundError as error:
+		raise HTTPException(status_code=404, detail="El evento seleccionado no existe.") from error
 	except ValueError as error:
 		raise HTTPException(status_code=422, detail=str(error)) from error
 	return {"message": "Usuario registrado correctamente.", "user": user}

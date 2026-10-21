@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -10,145 +9,127 @@
 <body>
     <header>
         <h1>Gestión de Invitados</h1>
-        <p>Agrega o elimina invitados para tu evento.</p>
+        <p>Agrega usuarios al evento seleccionado.</p>
     </header>
 
-```
-<main>
-    <!-- Formulario para agregar invitado -->
-    <section>
-        <h2>Agregar invitado</h2>
+    <main>
+        <section>
+            <h2>Agregar invitado</h2>
+            <form id="form-invitado" action="/register" method="post">
+                <label for="nombre-invitado">Nombre:</label>
+                <input type="text" id="nombre-invitado" name="first_name" maxlength="80" required>
 
-        <form id="form-invitado">
+                <label for="apellido-invitado">Apellido:</label>
+                <input type="text" id="apellido-invitado" name="last_name" maxlength="80" required>
 
-            <label for="nombre-invitado">Nombre:</label>
-            <input 
-                type="text" 
-                id="nombre-invitado" 
-                name="nombre" 
-                placeholder="Ej: Juan" 
-                required
-            >
+                <label for="email-invitado">Email:</label>
+                <input type="email" id="email-invitado" name="email" required>
 
+                <label for="password-invitado">Contraseña:</label>
+                <input type="password" id="password-invitado" name="password" maxlength="1024" required>
 
-            <label for="apellido-invitado">Apellido:</label>
-            <input 
-                type="text" 
-                id="apellido-invitado" 
-                name="apellido" 
-                placeholder="Ej: Pérez" 
-                required
-            >
+                <fieldset>
+                    <legend>Rol</legend>
+                    <input type="radio" id="anfitrion" name="role" value="anfitrion">
+                    <label for="anfitrion">Anfitrión</label>
+                    <input type="radio" id="invitado" name="role" value="invitado" checked>
+                    <label for="invitado">Invitado</label>
+                </fieldset>
 
-            <br><br>
+                <button id="submit-invitado" type="submit">Agregar</button>
+            </form>
+            <p id="mensaje-invitado" role="status" aria-live="polite"></p>
+        </section>
 
-             <label for="email-invitado">Email:</label>
-            <input 
-                type="email" 
-                id="email-invitado" 
-                name="email" 
-                placeholder="Ej: juanperez@gmail.com" 
-                required
-            >
+        <section>
+            <h2>Lista de invitados actuales</h2>
+            <ul id="lista-invitados"></ul>
+        </section>
+    </main>
 
-             <label for="password-invitado">Contraseña:</label>
-            <input 
-                type="password" 
-                id="password-invitado" 
-                name="password" 
-                required
+    <footer>
+        <br>
+        <a id="volver-perfil" href="/perfiles/perfilAdminstrador/perfil.html">Volver al menú del evento</a>
+    </footer>
 
-
-            >
-            <br>
-            <button type="submit">Agregar</button>
-        </form>
-    </section>
-
-    <!-- Lista donde se mostrarán los invitados -->
-    <section>
-        <h2>Lista de invitados actuales</h2>
-        <ul id="lista-invitados">
-            <!-- Los invitados se cargarán aquí automáticamente -->
-        </ul>
-    </section>
-</main>
-
-<footer>
-    <br>
-    <a href="/perfiles/perfilAdminstrador/perfil.html">Volver al menú del anfitrión</a>
-</footer>
-
-<!-- Script de funcionalidad en JavaScript -->
-<script>
-    document.addEventListener("DOMContentLoaded", () => {
+    <script>
         const form = document.getElementById("form-invitado");
-        const inputNombre = document.getElementById("nombre-invitado");
-        const inputApellido = document.getElementById("apellido-invitado");
-        const listaInvitados = document.getElementById("lista-invitados");
- 
-        // Cargar invitados guardados previamente
-        let invitados = JSON.parse(localStorage.getItem("invitados")) || [];
+        const message = document.getElementById("mensaje-invitado");
+        const guestList = document.getElementById("lista-invitados");
+        const submitButton = document.getElementById("submit-invitado");
+        const eventIdValue = new URLSearchParams(window.location.search).get("event_id");
+        const eventId = Number(eventIdValue);
+        const guestsUrl = `/eventos/${encodeURIComponent(eventId)}/invitados`;
 
-        function mostrarInvitados() {
-            listaInvitados.innerHTML = "";
-
-            if (invitados.length === 0) {
-                listaInvitados.innerHTML = "<li>No hay invitados cargados todavía.</li>";
-                return;
-            }
-
-            invitados.forEach((invitado, index) => {
-                const li = document.createElement("li");
-
-                li.innerHTML = `
-                    ${invitado.nombre} ${invitado.apellido}
-                    <button onclick="eliminarInvitado(${index})">Eliminar</button>
-                `;
-
-                listaInvitados.appendChild(li);
-            });
+        if (!eventIdValue || !Number.isSafeInteger(eventId) || eventId < 1) {
+            submitButton.disabled = true;
+            message.textContent = "Selecciona un evento antes de agregar invitados.";
+        } else {
+            const profileUrl = new URL(document.getElementById("volver-perfil").href);
+            profileUrl.searchParams.set("event_id", eventId);
+            document.getElementById("volver-perfil").href = profileUrl.toString();
+            form.addEventListener("submit", registerGuest);
+            loadGuests();
         }
 
-        // Función para agregar invitado
-        form.addEventListener("submit", (e) => {
-            e.preventDefault();
+        async function registerGuest(event) {
+            event.preventDefault();
+            message.textContent = "Registrando usuario...";
 
-            const nombre = inputNombre.value.trim();
-            const apellido = inputApellido.value.trim();
+            try {
+                const response = await fetch(form.action, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        username: form.elements.email.value,
+                        password: form.elements.password.value,
+                        first_name: form.elements.first_name.value,
+                        last_name: form.elements.last_name.value,
+                        role: form.elements.role.value,
+                        event_id: eventId,
+                    }),
+                });
+                const result = await response.json();
+                if (!response.ok) {
+                    message.textContent = result.detail || "No se pudo registrar el usuario.";
+                    return;
+                }
 
-            if (nombre !== "" && apellido !== "") {
-
-                const invitado = {
-                    nombre: nombre,
-                    apellido: apellido
-                };
-
-                invitados.push(invitado);
-
-                localStorage.setItem("invitados", JSON.stringify(invitados));
-
-                inputNombre.value = "";
-                inputApellido.value = "";
-
-                mostrarInvitados();
+                form.reset();
+                message.textContent = "Usuario agregado al evento correctamente.";
+                await loadGuests(false);
+            } catch {
+                message.textContent = "No se pudo conectar con el servidor.";
             }
-        });
+        }
 
-        // Función para eliminar invitado
-        window.eliminarInvitado = function(index) {
-            invitados.splice(index, 1);
+        async function loadGuests(showLoading = true) {
+            if (showLoading) {
+                message.textContent = "Cargando invitados...";
+            }
 
-            localStorage.setItem("invitados", JSON.stringify(invitados));
+            try {
+                const response = await fetch(guestsUrl);
+                const guests = await response.json();
+                if (!response.ok) {
+                    throw new Error(guests.detail || "No se pudieron cargar los invitados.");
+                }
 
-            mostrarInvitados();
-        };
-
-        // Mostrar la lista inicial al cargar la página
-        mostrarInvitados();
-    });
-</script>
-```
-
+                guestList.replaceChildren();
+                for (const guest of guests) {
+                    const item = document.createElement("li");
+                    item.textContent = `${guest.name} (${guest.username}) - ${guest.role}`;
+                    guestList.appendChild(item);
+                }
+                if (guests.length === 0) {
+                    message.textContent = "Todavía no hay invitados para este evento.";
+                } else if (showLoading) {
+                    message.textContent = "";
+                }
+            } catch (error) {
+                message.textContent = error.message || "No se pudieron cargar los invitados.";
+            }
+        }
+    </script>
 </body>
 </html>

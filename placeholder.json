@@ -17,6 +17,39 @@
       "username": "invitado",
       "password_hash": "pbkdf2_sha256$600000$76e24af8148153934f3b6266484eb8f6$6cba1baa8ad21d8f6f4fff8b9b32ad50dfb3fc374e1514a1b66b00b22eb2ed27",
       "role": "invitado"
+    },
+    {
+      "id": 4,
+      "username": "jrani88@gmail.com",
+      "password_hash": "pbkdf2_sha256$600000$80b70d910cad8c2d08698625b13f8072$ebf521c91be9866f0c4356bccfd2da44af9575c07c632c40fa82716695553e2b",
+      "role": "invitado",
+      "event_id": 1,
+      "first_name": "Juan",
+      "last_name": "Rani"
+    }
+  ],
+  "events": [
+    {
+      "id": 1,
+      "name": "Cumpleaños Franco Mastantuono",
+      "guests": [
+        {
+          "user_id": 4,
+          "username": "jrani88@gmail.com",
+          "name": "Juan Rani",
+          "role": "invitado"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "bar mitzvah de Adrian",
+      "guests": []
+    },
+    {
+      "id": 3,
+      "name": "Casamiento de Lucas Rodriguez",
+      "guests": []
     }
   ]
 }

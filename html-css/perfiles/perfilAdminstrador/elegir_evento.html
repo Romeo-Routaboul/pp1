@@ -11,13 +11,42 @@
     <main> 
         <section> 
             <h2>Opciones</h2> 
-            <ul> 
-                <li> <a href="/perfiles/perfilAdminstrador/perfil.html">Cumpleaños Franco Mastantuono</a> </li> 
-                <li> <a href="/perfiles/perfilAdminstrador/perfil.html">bar mitzvah de Adrian</a> </li> 
-                <li> <a href="/perfiles/perfilAdminstrador/perfil.html">Casamiento de Lucas Rodriguez</a> </li> 
+            <ul id="event-list">
             </ul> 
+            <p id="event-message" role="status" aria-live="polite"></p>
         </section> 
     </main> 
     <a href="/perfiles/perfilAdminstrador/crear_elegir_evento.html">Volver al inicio</a>
+    <script>
+        const eventList = document.getElementById("event-list");
+        const eventMessage = document.getElementById("event-message");
+
+        async function loadEvents() {
+            eventMessage.textContent = "Cargando eventos...";
+
+            try {
+                const response = await fetch("/eventos");
+                const events = await response.json();
+                if (!response.ok) {
+                    throw new Error(events.detail || "No se pudieron cargar los eventos.");
+                }
+
+                eventList.replaceChildren();
+                for (const event of events) {
+                    const item = document.createElement("li");
+                    const link = document.createElement("a");
+                    link.href = `/perfiles/perfilAdminstrador/perfil.html?event_id=${encodeURIComponent(event.id)}`;
+                    link.textContent = event.name;
+                    item.appendChild(link);
+                    eventList.appendChild(item);
+                }
+                eventMessage.textContent = events.length ? "" : "Todavía no hay eventos.";
+            } catch (error) {
+                eventMessage.textContent = error.message || "No se pudieron cargar los eventos.";
+            }
+        }
+
+        loadEvents();
+    </script>
 </body>
 </html>

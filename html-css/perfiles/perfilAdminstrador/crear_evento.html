@@ -8,11 +8,41 @@
 </head>
 <body>
     <h1>crear evento</h1>
-    <main> 
+    <main>
+        <form id="event-form" action="/eventos" method="post">
         <label for="evento">nombre del evento</label>
-       <input type="text" name="evento" id="evento">
-       <button type="submit">crear</button>
-    </main> 
+        <input type="text" name="name" id="evento" maxlength="120" required>
+        <button type="submit">crear</button>
+        </form>
+        <p id="event-message" role="status" aria-live="polite"></p>
+    </main>
     <a href="/perfiles/perfilAdminstrador/crear_elegir_evento.html">Volver al inicio</a>
+    <script>
+        const eventForm = document.getElementById("event-form");
+        const eventMessage = document.getElementById("event-message");
+
+        eventForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            eventMessage.textContent = "Creando evento...";
+
+            try {
+                const response = await fetch(eventForm.action, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name: eventForm.elements.name.value }),
+                });
+                const result = await response.json();
+                if (!response.ok) {
+                    eventMessage.textContent = result.detail || "No se pudo crear el evento.";
+                    return;
+                }
+
+                eventForm.reset();
+                eventMessage.textContent = "Evento creado correctamente.";
+            } catch {
+                eventMessage.textContent = "No se pudo conectar con el servidor.";
+            }
+        });
+    </script>
 </body>
 </html>

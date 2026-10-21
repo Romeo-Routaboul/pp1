@@ -12,11 +12,31 @@
         <section> 
             <h2>Opciones</h2> 
             <ul> 
-                <li> <a href="/perfiles/perfilAdminstrador/opciones/crear_invitados.html">crear invitados</a> </li> 
-                <li> <a href="/perfiles/perfilAdminstrador/opciones/eliminar_invitados.html">Eliminar invitados</a> </li> 
+                <li><a id="crear-invitados" href="/perfiles/perfilAdminstrador/opciones/crear_invitados.html">crear invitados</a></li>
+                <li><a id="eliminar-invitados" href="/perfiles/perfilAdminstrador/opciones/eliminar_invitados.html">Eliminar invitados</a></li>
             </ul> 
+            <p id="event-message" role="status" aria-live="polite"></p>
         </section> 
     </main> 
-    <a href="/">Volver al inicio</a>
+    <a id="volver-eventos" href="/perfiles/perfilAdminstrador/crear_elegir_evento.html">Volver a elegir evento</a>
+    <script>
+        const eventId = new URLSearchParams(window.location.search).get("event_id");
+        const eventMessage = document.getElementById("event-message");
+
+        if (eventId) {
+            for (const linkId of ["crear-invitados", "eliminar-invitados"]) {
+                const link = document.getElementById(linkId);
+                const target = new URL(link.href);
+                target.searchParams.set("event_id", eventId);
+                link.href = target.toString();
+            }
+            const backLink = document.getElementById("volver-eventos");
+            const backTarget = new URL(backLink.href);
+            backTarget.searchParams.set("event_id", eventId);
+            backLink.href = backTarget.toString();
+        } else {
+            eventMessage.textContent = "Selecciona un evento antes de gestionar sus invitados.";
+        }
+    </script>
 </body>
 </html>

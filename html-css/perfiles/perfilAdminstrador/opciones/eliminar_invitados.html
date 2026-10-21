@@ -3,46 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestión de Invitados - PP1</title>
+    <title>Eliminar invitados - PP1</title>
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
     <header>
-        <h1>Gestión de Invitados</h1>
-        <p>Desde este apartado puedes eliminar invitados</p>
+        <h1>Eliminar invitados</h1>
+        <p>Elimina invitados del evento seleccionado.</p>
     </header>
 
     <main>
-        <!-- Formulario para agregar invitado -->
-        
-
-        <!-- Lista donde se mostrarán los invitados -->
         <section>
             <h2>Lista de invitados actuales</h2>
-            <ul id="lista-invitados">
-                <li>N.Paz <button onclick="this.parentElement.remove()" >Eliminar</button></li></li> 
-                <li>P.Paz <button onclick="this.parentElement.remove()" >Eliminar</button></li></li> 
-                <li>D.Simeone <button onclick="this.parentElement.remove()" >Eliminar</button></li></li>
-                <li>Giuliano.Simeone <button onclick="this.parentElement.remove()" >Eliminar</button></li></li>
-                <li>Gio.Simeone <button onclick="this.parentElement.remove()" >Eliminar</button></li></li>
-                <li>L.Martinez <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-                <li>C.Romero <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-                <li>N.Molina <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-                <li>E.Fernandez <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-                <li>J.Alvarez <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-                <li>L.A.Messi <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-                <li>A.Roccuzo <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-                <li>T.Messi <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-                <li>C.Messi <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-                <li>M.Messi <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-            </ul>
+            <ul id="lista-invitados"></ul>
+            <p id="mensaje-invitados" role="status" aria-live="polite"></p>
         </section>
     </main>
 
     <footer>
         <br>
-        <a href="/perfiles/perfilAdminstrador/perfil.html">Volver al menú del anfitrión</a>
+        <a id="volver-perfil" href="/perfiles/perfilAdminstrador/perfil.html">Volver al menú del evento</a>
     </footer>
 
+    <script>
+        const guestList = document.getElementById("lista-invitados");
+        const message = document.getElementById("mensaje-invitados");
+        const eventIdValue = new URLSearchParams(window.location.search).get("event_id");
+        const eventId = Number(eventIdValue);
+
+        if (!eventIdValue || !Number.isSafeInteger(eventId) || eventId < 1) {
+            message.textContent = "Selecciona un evento antes de eliminar invitados.";
+        } else {
+            document.getElementById("volver-perfil").href =
+                `/perfiles/perfilAdminstrador/perfil.html?event_id=${encodeURIComponent(eventId)}`;
+            loadGuests();
+        }
+
+        async function loadGuests() {
+            message.textContent = "Cargando invitados...";
+
+            try {
+                const response = await fetch(`/eventos/${encodeURIComponent(eventId)}/invitados`);
+                const guests = await response.json();
+                if (!response.ok) {
+                    throw new Error(guests.detail || "No se pudieron cargar los invitados.");
+                }
+
+                guestList.replaceChildren();
+                for (const guest of guests) {
+                    const item = document.createElement("li");
+                    const description = document.createElement("span");
+                    description.textContent = `${guest.name} (${guest.username}) - ${guest.role} `;
+
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.textContent = "Eliminar";
+                    button.addEventListener("click", () => deleteGuest(guest, button));
+
+                    item.append(description, button);
+                    guestList.appendChild(item);
+                }
+                message.textContent = guests.length ? "" : "Todavía no hay invitados para este evento.";
+            } catch (error) {
+                message.textContent = error.message || "No se pudieron cargar los invitados.";
+            }
+        }
+
+        async function deleteGuest(guest, button) {
+            button.disabled = true;
+            message.textContent = "Eliminando invitado...";
+
+            try {
+                const response = await fetch(
+                    `/eventos/${encodeURIComponent(eventId)}/invitados/${encodeURIComponent(guest.user_id)}`,
+                    { method: "DELETE" },
+                );
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.detail || "No se pudo eliminar el invitado.");
+                }
+
+                await loadGuests();
+                message.textContent = result.message;
+            } catch (error) {
+                button.disabled = false;
+                message.textContent = error.message || "No se pudo eliminar el invitado.";
+            }
+        }
+    </script>
 </body>
 </html>
