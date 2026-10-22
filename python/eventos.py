@@ -2,7 +2,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -37,6 +37,24 @@ class EventCreate(BaseModel):
         if not normalized_name:
             raise ValueError("El nombre del evento no puede estar vacío.")
         return normalized_name
+
+
+class GuestProfileUpdate(BaseModel):
+    attendance: Literal["si", "no"] | None = None
+    restrictions: list[str] | None = None
+    other_restriction: str | None = Field(default=None, max_length=500)
+
+    @field_validator("restrictions")
+    @classmethod
+    def normalize_restrictions(cls, restrictions: list[str] | None) -> list[str] | None:
+        if restrictions is None:
+            return None
+        return list(dict.fromkeys(item.strip() for item in restrictions if item.strip()))
+
+    @field_validator("other_restriction")
+    @classmethod
+    def normalize_other_restriction(cls, restriction: str | None) -> str | None:
+        return restriction.strip() if restriction is not None else None
 
 
 class JsonEventRepository:
@@ -116,6 +134,67 @@ class JsonEventRepository:
                 raise ValueError("La lista de invitados del evento es inválida.")
             return guests
 
+    def get_guest_profile(self, event_id: int, user_id: int) -> dict[str, object]:
+        with PLACEHOLDER_LOCK:
+            data = self._read_data()
+            event = next(
+                (item for item in data["events"] if item["id"] == event_id),
+                None,
+            )
+            if event is None:
+                raise EventNotFoundError
+            guests = event.get("guests", [])
+            if not isinstance(guests, list):
+                raise ValueError("La lista de invitados del evento es inválida.")
+            guest = next(
+                (
+                    item for item in guests
+                    if isinstance(item, dict) and item.get("user_id") == user_id
+                ),
+                None,
+            )
+            if guest is None:
+                raise GuestNotFoundError
+            return {
+                "attendance": guest.get("attendance"),
+                "restrictions": guest.get("restrictions", []),
+                "other_restriction": guest.get("other_restriction", ""),
+            }
+
+    def update_guest_profile(
+        self,
+        event_id: int,
+        user_id: int,
+        updates: dict[str, object],
+    ) -> dict[str, object]:
+        with PLACEHOLDER_LOCK:
+            data = self._read_data()
+            event = next(
+                (item for item in data["events"] if item["id"] == event_id),
+                None,
+            )
+            if event is None:
+                raise EventNotFoundError
+            guests = event.get("guests", [])
+            if not isinstance(guests, list):
+                raise ValueError("La lista de invitados del evento es inválida.")
+            guest = next(
+                (
+                    item for item in guests
+                    if isinstance(item, dict) and item.get("user_id") == user_id
+                ),
+                None,
+            )
+            if guest is None:
+                raise GuestNotFoundError
+            guest.update(updates)
+            self._write_data(data)
+            return {
+                "attendance": guest.get("attendance"),
+                "restrictions": guest.get("restrictions", []),
+                "other_restriction": guest.get("other_restriction", ""),
+            }
+
     def delete_event_guest(self, event_id: int, user_id: int) -> dict[str, object]:
         with PLACEHOLDER_LOCK:
             data = self._read_data()
@@ -143,6 +222,19 @@ class JsonEventRepository:
                 raise GuestNotFoundError
 
             guest = guests.pop(guest_index)
+            minors = event.get("menores", [])
+            if not isinstance(minors, list) or any(not isinstance(minor, dict) for minor in minors):
+                raise ValueError("La lista de menores del evento es inválida.")
+            remaining_minors = []
+            for minor in minors:
+                adult_ids = minor.get("adult_ids", [])
+                if not isinstance(adult_ids, list):
+                    raise ValueError("La lista de adultos asociados al menor es inválida.")
+                minor["adult_ids"] = [adult_id for adult_id in adult_ids if adult_id != user_id]
+                if minor["adult_ids"]:
+                    remaining_minors.append(minor)
+            event["menores"] = remaining_minors
+
             gifts = event.get("regalos", [])
             if not isinstance(gifts, list):
                 raise ValueError("La lista de regalos del evento es inválida.")
@@ -184,6 +276,40 @@ def list_event_guests(event_id: int) -> list[dict[str, object]]:
         return event_repository.list_event_guests(event_id)
     except EventNotFoundError as error:
         raise HTTPException(status_code=404, detail="El evento seleccionado no existe.") from error
+
+
+@router.get("/{event_id}/invitados/{user_id}/perfil")
+def get_guest_profile(event_id: int, user_id: int) -> dict[str, object]:
+    try:
+        return event_repository.get_guest_profile(event_id, user_id)
+    except EventNotFoundError as error:
+        raise HTTPException(status_code=404, detail="El evento seleccionado no existe.") from error
+    except GuestNotFoundError as error:
+        raise HTTPException(
+            status_code=404,
+            detail="El invitado no pertenece a este evento.",
+        ) from error
+
+
+@router.patch("/{event_id}/invitados/{user_id}/perfil")
+def update_guest_profile(
+    event_id: int,
+    user_id: int,
+    updates: GuestProfileUpdate,
+) -> dict[str, object]:
+    try:
+        return event_repository.update_guest_profile(
+            event_id,
+            user_id,
+            updates.model_dump(exclude_unset=True),
+        )
+    except EventNotFoundError as error:
+        raise HTTPException(status_code=404, detail="El evento seleccionado no existe.") from error
+    except GuestNotFoundError as error:
+        raise HTTPException(
+            status_code=404,
+            detail="El invitado no pertenece a este evento.",
+        ) from error
 
 
 @router.delete("/{event_id}/invitados/{user_id}")

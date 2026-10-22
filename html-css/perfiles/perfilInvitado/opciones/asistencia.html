@@ -1,32 +1,125 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Confirmar asistencia</title>
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-    <header> 
-        <h1>Confirmar asistencia</h1> 
-    </header> 
-    <form data-event-required>
-  <fieldset>
-    <legend>Asistiras al evento?</legend>
-    <div>
-      <input type="radio" id="si" name="asistencia" value="si" />
-      <label for="si">Si</label>
-
-      <input type="radio" id="no" name="asistencia" value="no" />
-      <label for="no">No</label>
-    </div>
-    <div>
-      <button type="submit">Enviar</button>
-    </div>
-  </fieldset>
-    </form>
-    <p data-event-status role="status" aria-live="polite"></p>
-    <footer> <a data-event-link href="/perfiles/perfilInvitado/perfil.html">Volver al menu</a> </footer>
+    <header>
+        <h1>Confirmar asistencia</h1>
+    </header>
+    <main>
+        <form id="form-asistencia" data-event-required>
+            <fieldset>
+                <legend>¿Asistirás al evento?</legend>
+                <input type="radio" id="si" name="attendance" value="si" required>
+                <label for="si">Sí</label>
+                <input type="radio" id="no" name="attendance" value="no">
+                <label for="no">No</label>
+                <button id="guardar-asistencia" type="submit">Guardar</button>
+            </fieldset>
+        </form>
+        <p id="mensaje-asistencia" role="status" aria-live="polite"></p>
+        <p data-event-status role="status" aria-live="polite"></p>
+    </main>
+    <footer>
+        <a data-event-link href="/perfiles/perfilInvitado/perfil.html">Volver al menú</a>
+    </footer>
     <script src="/event-context.js"></script>
+    <script>
+        const form = document.getElementById("form-asistencia");
+        const message = document.getElementById("mensaje-asistencia");
+        const submitButton = document.getElementById("guardar-asistencia");
+        const user = window.pp1User;
+        const eventIdValue = new URLSearchParams(window.location.search).get("event_id");
+        const pageEventId = eventIdValue === null ? null : Number(eventIdValue);
+        const userEventId = Number(user?.event_id);
+        const hasValidUserEvent = Number.isSafeInteger(userEventId) && userEventId > 0;
+        const eventId = eventIdValue === null ? userEventId : pageEventId;
+        const validContext = Boolean(
+            Number.isSafeInteger(eventId) &&
+            eventId > 0 &&
+            hasValidUserEvent &&
+            eventId === userEventId &&
+            user &&
+            user.role === "invitado" &&
+            Number.isSafeInteger(user.id),
+        );
+        const profileUrl = validContext
+            ? `/eventos/${encodeURIComponent(eventId)}/invitados/${encodeURIComponent(user.id)}/perfil`
+            : null;
+
+        if (validContext && !window.pp1EventId) {
+            window.pp1EventId = eventId;
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.set("event_id", eventId);
+            window.history.replaceState(null, "", currentUrl);
+
+            for (const link of document.querySelectorAll("[data-event-link]")) {
+                const target = new URL("/perfiles/perfilInvitado/perfil.html", window.location.origin);
+                target.searchParams.set("event_id", eventId);
+                link.href = target.toString();
+                link.removeAttribute("aria-disabled");
+            }
+            for (const control of form.querySelectorAll("input, button")) {
+                control.disabled = false;
+            }
+            document.querySelector("[data-event-status]").textContent =
+                `Opciones asociadas al evento #${eventId}.`;
+        }
+
+        if (!validContext) {
+            form.querySelectorAll("input, button").forEach((control) => control.disabled = true);
+            message.textContent = user && eventIdValue !== null && hasValidUserEvent
+                ? "El evento de esta página no coincide con el evento asociado a tu cuenta."
+                : "Iniciá sesión con una cuenta de invitado asociada a este evento.";
+        } else {
+            loadProfile();
+        }
+
+        async function loadProfile() {
+            submitButton.disabled = true;
+            message.textContent = "Cargando asistencia...";
+            try {
+                const response = await fetch(profileUrl);
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.detail || "No se pudo cargar la asistencia.");
+                }
+                if (result.attendance) {
+                    form.elements.attendance.value = result.attendance;
+                }
+                submitButton.disabled = false;
+                message.textContent = "";
+            } catch (error) {
+                message.textContent = error.message || "No se pudo conectar con el servidor.";
+            }
+        }
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            if (!validContext) return;
+            submitButton.disabled = true;
+            message.textContent = "Guardando asistencia...";
+            try {
+                const response = await fetch(profileUrl, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ attendance: form.elements.attendance.value }),
+                });
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.detail || "No se pudo guardar la asistencia.");
+                }
+                message.textContent = "Asistencia guardada correctamente.";
+            } catch (error) {
+                message.textContent = error.message || "No se pudo conectar con el servidor.";
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+    </script>
 </body>
 </html>

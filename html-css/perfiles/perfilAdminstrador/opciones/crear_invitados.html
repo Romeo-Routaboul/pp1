@@ -42,6 +42,26 @@
         </section>
 
         <section>
+            <h2>Agregar menor</h2>
+            <form id="form-menor-evento">
+                <label for="nombre-menor-evento">Nombre y apellido:</label>
+                <input id="nombre-menor-evento" name="name" type="text" maxlength="120" required>
+
+                <label for="edad-menor-evento">Edad:</label>
+                <input id="edad-menor-evento" name="age" type="number" min="0" max="17" required>
+
+                <label for="adultos-menor-evento">Adultos asociados:</label>
+                <select id="adultos-menor-evento" name="adult_ids" multiple required size="5"></select>
+                <p>Usá Ctrl (Windows) o Cmd (Mac) para seleccionar más de un adulto.</p>
+
+                <button id="submit-menor" type="submit">Agregar menor</button>
+            </form>
+            <p id="mensaje-menor" role="status" aria-live="polite"></p>
+            <h3>Menores del evento</h3>
+            <ul id="lista-menores-evento"></ul>
+        </section>
+
+        <section>
             <h2>Lista de invitados actuales</h2>
             <ul id="lista-invitados"></ul>
         </section>
@@ -57,19 +77,28 @@
         const message = document.getElementById("mensaje-invitado");
         const guestList = document.getElementById("lista-invitados");
         const submitButton = document.getElementById("submit-invitado");
+        const minorForm = document.getElementById("form-menor-evento");
+        const minorMessage = document.getElementById("mensaje-menor");
+        const minorSubmitButton = document.getElementById("submit-menor");
+        const adultSelect = document.getElementById("adultos-menor-evento");
+        const minorList = document.getElementById("lista-menores-evento");
         const eventIdValue = new URLSearchParams(window.location.search).get("event_id");
         const eventId = Number(eventIdValue);
         const guestsUrl = `/eventos/${encodeURIComponent(eventId)}/invitados`;
+        const minorsUrl = `/eventos/${encodeURIComponent(eventId)}/menores`;
+        let eventGuests = [];
 
         if (!eventIdValue || !Number.isSafeInteger(eventId) || eventId < 1) {
             submitButton.disabled = true;
+            minorSubmitButton.disabled = true;
             message.textContent = "Selecciona un evento antes de agregar invitados.";
         } else {
             const profileUrl = new URL(document.getElementById("volver-perfil").href);
             profileUrl.searchParams.set("event_id", eventId);
             document.getElementById("volver-perfil").href = profileUrl.toString();
             form.addEventListener("submit", registerGuest);
-            loadGuests();
+            minorForm.addEventListener("submit", registerMinor);
+            loadGuests().then(() => loadMinors());
         }
 
         async function registerGuest(event) {
@@ -103,6 +132,36 @@
             }
         }
 
+        async function registerMinor(event) {
+            event.preventDefault();
+            minorSubmitButton.disabled = true;
+            minorMessage.textContent = "Agregando menor...";
+
+            try {
+                const response = await fetch(minorsUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        name: minorForm.elements.name.value,
+                        age: Number(minorForm.elements.age.value),
+                        adult_ids: Array.from(adultSelect.selectedOptions, (option) => Number(option.value)),
+                    }),
+                });
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.detail || "No se pudo agregar al menor.");
+                }
+
+                minorForm.reset();
+                minorMessage.textContent = "Menor agregado y asociado correctamente.";
+                await loadMinors(false);
+            } catch (error) {
+                minorMessage.textContent = error.message || "No se pudo conectar con el servidor.";
+            } finally {
+                minorSubmitButton.disabled = adultSelect.options.length === 0;
+            }
+        }
+
         async function loadGuests(showLoading = true) {
             if (showLoading) {
                 message.textContent = "Cargando invitados...";
@@ -115,12 +174,21 @@
                     throw new Error(guests.detail || "No se pudieron cargar los invitados.");
                 }
 
+                eventGuests = guests;
                 guestList.replaceChildren();
+                adultSelect.replaceChildren();
                 for (const guest of guests) {
                     const item = document.createElement("li");
                     item.textContent = `${guest.name} (${guest.username}) - ${guest.role}`;
                     guestList.appendChild(item);
+                    if (guest.role === "invitado") {
+                        const option = document.createElement("option");
+                        option.value = guest.user_id;
+                        option.textContent = `${guest.name} (${guest.username})`;
+                        adultSelect.appendChild(option);
+                    }
                 }
+                minorSubmitButton.disabled = adultSelect.options.length === 0;
                 if (guests.length === 0) {
                     message.textContent = "Todavía no hay invitados para este evento.";
                 } else if (showLoading) {
@@ -128,6 +196,35 @@
                 }
             } catch (error) {
                 message.textContent = error.message || "No se pudieron cargar los invitados.";
+            }
+        }
+
+        async function loadMinors(showLoading = true) {
+            if (showLoading) {
+                minorMessage.textContent = "Cargando menores...";
+            }
+
+            try {
+                const response = await fetch(minorsUrl);
+                const minors = await response.json();
+                if (!response.ok) {
+                    throw new Error(minors.detail || "No se pudieron cargar los menores.");
+                }
+
+                minorList.replaceChildren();
+                for (const minor of minors) {
+                    const item = document.createElement("li");
+                    const adults = minor.adult_ids
+                        .map((adultId) => eventGuests.find((guest) => guest.user_id === adultId)?.name)
+                        .filter(Boolean);
+                    item.textContent = `${minor.name}, ${minor.age} años — ${adults.join(", ")}`;
+                    minorList.appendChild(item);
+                }
+                minorMessage.textContent = minors.length
+                    ? ""
+                    : "Todavía no hay menores asociados a este evento.";
+            } catch (error) {
+                minorMessage.textContent = error.message || "No se pudieron cargar los menores.";
             }
         }
     </script>

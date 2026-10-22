@@ -1,1 +1,1 @@
-las contraseñas de cada usuario placeholder son iguales a sus usernames
+las contraseñas de los perfiles ya creados son sus roles

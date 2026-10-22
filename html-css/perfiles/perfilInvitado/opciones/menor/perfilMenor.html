@@ -9,18 +9,10 @@
 <body>
     <header>
         <h1>Menores a cargo</h1>
-        <p>Asociá menores a tu cuenta para gestionar su participación en este evento.</p>
+        <p>Consultá los menores asociados a tu cuenta y gestioná su participación en este evento.</p>
     </header>
     <main>
         <section data-event-required>
-            <h2>Asociar un menor</h2>
-            <form id="form-menor">
-                <label for="nombre-menor">Nombre y apellido:</label>
-                <input id="nombre-menor" name="name" type="text" maxlength="120" required>
-                <label for="edad-menor">Edad:</label>
-                <input id="edad-menor" name="age" type="number" min="0" max="17" required>
-                <button id="agregar-menor" type="submit">Asociar menor</button>
-            </form>
             <p id="mensaje-menores" role="status" aria-live="polite"></p>
             <h2>Menores asociados</h2>
             <ul id="lista-menores"></ul>
@@ -39,10 +31,8 @@
     </footer>
     <script src="/event-context.js"></script>
     <script>
-        const form = document.getElementById("form-menor");
         const list = document.getElementById("lista-menores");
         const message = document.getElementById("mensaje-menores");
-        const submitButton = document.getElementById("agregar-menor");
         const selectedMinorId = new URLSearchParams(window.location.search).get("minor_id");
         const user = window.pp1User;
         const canManage = Boolean(
@@ -57,43 +47,10 @@
             : null;
 
         if (!canManage) {
-            submitButton.disabled = true;
             message.textContent = "Iniciá sesión con una cuenta de invitado para gestionar menores.";
         } else {
             loadMinors();
         }
-
-        form.addEventListener("submit", async (event) => {
-            event.preventDefault();
-            if (!canManage) {
-                return;
-            }
-
-            submitButton.disabled = true;
-            message.textContent = "Asociando menor...";
-            try {
-                const response = await fetch(minorsUrl, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        name: form.elements.name.value,
-                        age: Number(form.elements.age.value),
-                    }),
-                });
-                const result = await response.json();
-                if (!response.ok) {
-                    throw new Error(result.detail || "No se pudo asociar al menor.");
-                }
-
-                form.reset();
-                await loadMinors(false);
-                message.textContent = "Menor asociado correctamente.";
-            } catch (error) {
-                message.textContent = error.message || "No se pudo conectar con el servidor.";
-            } finally {
-                submitButton.disabled = false;
-            }
-        });
 
         async function loadMinors(showLoading = true) {
             if (showLoading) {
@@ -120,11 +77,7 @@
                     menuUrl.searchParams.set("minor_id", minor.id);
                     menuLink.href = menuUrl.toString();
                     menuLink.textContent = "Gestionar";
-                    const removeButton = document.createElement("button");
-                    removeButton.type = "button";
-                    removeButton.textContent = "Desasociar";
-                    removeButton.addEventListener("click", () => removeMinor(minor, removeButton));
-                    item.append(details, menuLink, document.createTextNode(" "), removeButton);
+                    item.append(details, menuLink);
                     list.appendChild(item);
                 }
                 const selectedMinor = minors.find(
@@ -155,26 +108,6 @@
                 }
             } catch (error) {
                 message.textContent = error.message || "No se pudieron cargar los menores.";
-            }
-        }
-
-        async function removeMinor(minor, button) {
-            button.disabled = true;
-            message.textContent = "Desasociando menor...";
-            try {
-                const response = await fetch(
-                    `${minorsUrl}/${encodeURIComponent(minor.id)}`,
-                    { method: "DELETE" },
-                );
-                const result = await response.json();
-                if (!response.ok) {
-                    throw new Error(result.detail || "No se pudo desasociar al menor.");
-                }
-                await loadMinors(false);
-                message.textContent = "Menor desasociado correctamente.";
-            } catch (error) {
-                button.disabled = false;
-                message.textContent = error.message || "No se pudo conectar con el servidor.";
             }
         }
     </script>

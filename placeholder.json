@@ -20,8 +20,8 @@
     },
     {
       "id": 4,
-      "username": "FMastan@anfitrion.com",
-      "password_hash": "pbkdf2_sha256$600000$718823bb63ec21edd2c03d21cea47e62$735165c9d4d0f89cefd8533ffca75bdb8f5c1940e96f5c323307bce49f8711a9",
+      "username": "Franco@anfitrion.com",
+      "password_hash": "pbkdf2_sha256$600000$e871736003f1f5b379ab9bdeeddc3e63$9b69962990d1ed5c48676becea3ed7787e2836528362fea075d5fde2b6f0c1b9",
       "role": "anfitrion",
       "event_id": 1,
       "first_name": "Franco",
@@ -29,12 +29,21 @@
     },
     {
       "id": 5,
-      "username": "jrani@invitado.com",
-      "password_hash": "pbkdf2_sha256$600000$104cde28a85dec94ccd4078bb905403c$9896c766295f5481f0cc4bdcd0cc70dec50ce965096a37fce9ce1888afe78ce5",
+      "username": "Juan@invitado.com",
+      "password_hash": "pbkdf2_sha256$600000$1aa7e5f62e6b30a4069b13027c29fb58$a7a765c4c6e9758d778ca30fe59ca0198ea7b77236b640d82267f4c4667e4de3",
       "role": "invitado",
       "event_id": 1,
       "first_name": "Juan",
       "last_name": "Rani"
+    },
+    {
+      "id": 6,
+      "username": "lalala@invitado.com",
+      "password_hash": "pbkdf2_sha256$600000$c8b8d08d91576203097528f5828a3598$f05ab78a10d26483f00e2be6a015653302cbd3bc7e112108663915bf6372a2fb",
+      "role": "invitado",
+      "event_id": 1,
+      "first_name": "lalala",
+      "last_name": "lelele"
     }
   ],
   "events": [
@@ -44,16 +53,29 @@
       "guests": [
         {
           "user_id": 4,
-          "username": "FMastan@anfitrion.com",
+          "username": "Franco@anfitrion.com",
           "name": "Franco Mastantuono",
           "role": "anfitrion"
         },
         {
           "user_id": 5,
-          "username": "jrani@invitado.com",
+          "username": "Juan@invitado.com",
           "name": "Juan Rani",
           "role": "invitado",
-          "menores": []
+          "attendance": "si",
+          "restrictions": [
+            "celiaco",
+            "lactosa",
+            "vegetariano",
+            "vegano"
+          ],
+          "other_restriction": "soy alergico al aire"
+        },
+        {
+          "user_id": 6,
+          "username": "lalala@invitado.com",
+          "name": "lalala lelele",
+          "role": "invitado"
         }
       ],
       "regalos": [
@@ -64,6 +86,22 @@
           "purchase_url": "https://www.mercadolibre.com.ar/grand-theft-auto-vi-gta-vi-caja-fisica-con-codigo-de-descarga-para-ps5/p/MLA74108173#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=1&type=product&tracking_id=1a968b40-fd06-472d-8af2-df0aa788da70&overlay_label_capability=not_apply&wid=MLA1859580411&sid=search&gid=1&pid=1",
           "id": 1,
           "reserved_by": null
+        }
+      ],
+      "menores": [
+        {
+          "id": 1,
+          "name": "blablabla",
+          "age": 12,
+          "adult_ids": [
+            5,
+            6
+          ],
+          "attendance": "si",
+          "restrictions": [
+            "lactosa"
+          ],
+          "other_restriction": ""
         }
       ]
     },

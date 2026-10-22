@@ -1,16 +1,25 @@
 (() => {
     const eventIdValue = new URLSearchParams(window.location.search).get("event_id");
-    const parsedEventId = Number(eventIdValue);
-    const hasEvent = Boolean(
-        eventIdValue && Number.isSafeInteger(parsedEventId) && parsedEventId > 0,
-    );
-
-    window.pp1EventId = hasEvent ? parsedEventId : null;
     try {
         window.pp1User = JSON.parse(sessionStorage.getItem("pp1User") || "null");
     } catch {
         window.pp1User = null;
     }
+
+    const parsedQueryEventId = Number(eventIdValue);
+    const userEventId = Number(window.pp1User?.event_id);
+    const hasQueryEvent = Boolean(
+        eventIdValue &&
+        Number.isSafeInteger(parsedQueryEventId) &&
+        parsedQueryEventId > 0,
+    );
+    const hasUserEvent = Boolean(
+        Number.isSafeInteger(userEventId) && userEventId > 0,
+    );
+    const parsedEventId = hasQueryEvent ? parsedQueryEventId : userEventId;
+    const hasEvent = hasQueryEvent || (!eventIdValue && hasUserEvent);
+
+    window.pp1EventId = hasEvent ? parsedEventId : null;
 
     for (const link of document.querySelectorAll("[data-event-link]")) {
         if (hasEvent) {

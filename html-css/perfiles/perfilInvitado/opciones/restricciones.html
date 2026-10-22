@@ -1,29 +1,112 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Restricciones alimentarias</title>
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-    <h1>Restricciones alimentarias</h1>
-    <p>Informe aqui cualquier tipo de restrccion alimentaria</p>
-    <form data-event-required>
-     <input type="checkbox" id="restrccion1" name="restrccion1" value="celiaco">
-    <label for="restrccion1">soy celiaco</label><br>
-    <input type="checkbox" id="restriccion2" name="restriccion2" value="lactosa">
-    <label for="restriccion2"> Soy intolerante a la lactosa</label><br>
-    <input type="checkbox" id="restriccion3" name="restriccion3" value="vegetariano">
-    <label for="restriccion3">Soy vegetariano</label><br>
-    <input type="checkbox" id="restriccion4" name="restriccion4" value="vegano">
-    <label for="restriccion4">Soy vegano</label><br>
-    <label for="name">Otra restriccion</label> 
-    <input type="text" id="otro" name="otro" minlength="2" maxlength="100" size="25" /><br>
-    <input type="button" value="Enviar">
-    </form>
-    <p data-event-status role="status" aria-live="polite"></p>
-    <footer> <a data-event-link href="/perfiles/perfilInvitado/perfil.html">Volver al menu</a> </footer>
+    <header>
+        <h1>Restricciones alimentarias</h1>
+        <p>Informá tus restricciones alimentarias para este evento.</p>
+    </header>
+    <main>
+        <form id="form-restricciones" data-event-required>
+            <fieldset>
+                <legend>Seleccioná todas las opciones que correspondan</legend>
+                <input type="checkbox" id="restriccion-celiaco" name="restrictions" value="celiaco">
+                <label for="restriccion-celiaco">Soy celíaco/a</label><br>
+                <input type="checkbox" id="restriccion-lactosa" name="restrictions" value="lactosa">
+                <label for="restriccion-lactosa">Soy intolerante a la lactosa</label><br>
+                <input type="checkbox" id="restriccion-vegetariano" name="restrictions" value="vegetariano">
+                <label for="restriccion-vegetariano">Soy vegetariano/a</label><br>
+                <input type="checkbox" id="restriccion-vegano" name="restrictions" value="vegano">
+                <label for="restriccion-vegano">Soy vegano/a</label><br>
+                <label for="otra-restriccion">Otra restricción</label>
+                <input type="text" id="otra-restriccion" name="other_restriction" maxlength="500">
+                <button id="guardar-restricciones" type="submit">Guardar</button>
+            </fieldset>
+        </form>
+        <p id="mensaje-restricciones" role="status" aria-live="polite"></p>
+        <p data-event-status role="status" aria-live="polite"></p>
+    </main>
+    <footer>
+        <a data-event-link href="/perfiles/perfilInvitado/perfil.html">Volver al menú</a>
+    </footer>
     <script src="/event-context.js"></script>
+    <script>
+        const form = document.getElementById("form-restricciones");
+        const message = document.getElementById("mensaje-restricciones");
+        const submitButton = document.getElementById("guardar-restricciones");
+        const user = window.pp1User;
+        const validContext = Boolean(
+            window.pp1EventId &&
+            user &&
+            user.role === "invitado" &&
+            user.event_id === window.pp1EventId &&
+            Number.isSafeInteger(user.id),
+        );
+        const profileUrl = validContext
+            ? `/eventos/${encodeURIComponent(window.pp1EventId)}/invitados/${encodeURIComponent(user.id)}/perfil`
+            : null;
+
+        if (!validContext) {
+            form.querySelectorAll("input, button").forEach((control) => control.disabled = true);
+            message.textContent = "Iniciá sesión con una cuenta de invitado asociada a este evento.";
+        } else {
+            loadProfile();
+        }
+
+        async function loadProfile() {
+            submitButton.disabled = true;
+            message.textContent = "Cargando restricciones...";
+            try {
+                const response = await fetch(profileUrl);
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.detail || "No se pudieron cargar las restricciones.");
+                }
+                const restrictions = Array.isArray(result.restrictions) ? result.restrictions : [];
+                for (const checkbox of form.querySelectorAll('input[name="restrictions"]')) {
+                    checkbox.checked = restrictions.includes(checkbox.value);
+                }
+                form.elements.other_restriction.value = result.other_restriction || "";
+                submitButton.disabled = false;
+                message.textContent = "";
+            } catch (error) {
+                message.textContent = error.message || "No se pudo conectar con el servidor.";
+            }
+        }
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            if (!validContext) return;
+            submitButton.disabled = true;
+            message.textContent = "Guardando restricciones...";
+            try {
+                const response = await fetch(profileUrl, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        restrictions: Array.from(
+                            form.querySelectorAll('input[name="restrictions"]:checked'),
+                            (checkbox) => checkbox.value,
+                        ),
+                        other_restriction: form.elements.other_restriction.value,
+                    }),
+                });
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.detail || "No se pudieron guardar las restricciones.");
+                }
+                message.textContent = "Restricciones guardadas correctamente.";
+            } catch (error) {
+                message.textContent = error.message || "No se pudo conectar con el servidor.";
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+    </script>
 </body>
 </html>
