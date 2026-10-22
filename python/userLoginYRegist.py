@@ -20,6 +20,7 @@ class UserRecord(TypedDict):
     username: str
     password_hash: str
     role: str | None
+    event_id: int | None
 
 
 class UserRepository(Protocol):
@@ -107,6 +108,7 @@ class JsonUserRepository:
             "username": user["username"],
             "password_hash": password_hash,
             "role": user.get("role") if isinstance(user.get("role"), str) else None,
+            "event_id": user.get("event_id") if isinstance(user.get("event_id"), int) else None,
         }
 
     def find_by_username(self, username: str) -> UserRecord | None:
@@ -150,6 +152,7 @@ class JsonUserRepository:
                 "username": username,
                 "password_hash": password_hash,
                 "role": role,
+                "event_id": event_id,
             }
             user_data: dict[str, object] = dict(user)
             if event_id is not None:
@@ -217,7 +220,12 @@ def _password_matches(password: str, stored_hash: str) -> bool:
 
 
 def _public_user(user: UserRecord) -> dict[str, int | str | None]:
-    return {"id": user["id"], "username": user["username"], "role": user["role"]}
+    return {
+        "id": user["id"],
+        "username": user["username"],
+        "role": user["role"],
+        "event_id": user["event_id"],
+    }
 
 
 def register_user(
@@ -234,11 +242,12 @@ def register_user(
 
     if role not in {"invitado", "anfitrion"}:
         raise ValueError("El rol debe ser invitado o anfitrión.")
-    if event_id is not None:
-        first_name = (first_name or "").strip()
-        last_name = (last_name or "").strip()
-        if not first_name or not last_name:
-            raise ValueError("El nombre y el apellido son obligatorios para el invitado.")
+    if event_id is None:
+        raise ValueError("Debes asociar la cuenta a un evento.")
+    first_name = (first_name or "").strip()
+    last_name = (last_name or "").strip()
+    if not first_name or not last_name:
+        raise ValueError("El nombre y el apellido son obligatorios para el invitado.")
 
     user = user_repository.create_user(
         normalized_username,

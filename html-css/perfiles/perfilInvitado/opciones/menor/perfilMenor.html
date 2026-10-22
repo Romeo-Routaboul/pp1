@@ -3,22 +3,180 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Perfil del menor a cargo del invitado - PP1</title>
+    <title>Menores a cargo - PP1</title>
     <link rel="stylesheet" href="/style.css">
 </head>
-<body> 
-    <header> 
-        <h1>Menú del menor</h1> 
-        <p>Bienvenido. Desde aquí podés gestionar la participación del menor a su cargo.</p> 
-    </header> 
-    <main> 
-        <section> 
-            <h2>Opciones</h2> 
-            <ul> 
-                <li> <a href="/perfiles/perfilInvitado/opciones/menor/asistenciaMenor.html">Confirmar asistencia</a> </li> 
-                <li> <a href="/perfiles/perfilInvitado/opciones/menor/restriccionesMenor.html">Informar restricción alimentaria</a> </li> 
-            </ul> 
-        </section> 
-    </main> 
-    <footer> <a href="/perfiles/perfilInvitado/perfil.html">Volver al perfil del mayor</a> </footer> 
-</body> </html>
+<body>
+    <header>
+        <h1>Menores a cargo</h1>
+        <p>Asociá menores a tu cuenta para gestionar su participación en este evento.</p>
+    </header>
+    <main>
+        <section data-event-required>
+            <h2>Asociar un menor</h2>
+            <form id="form-menor">
+                <label for="nombre-menor">Nombre y apellido:</label>
+                <input id="nombre-menor" name="name" type="text" maxlength="120" required>
+                <label for="edad-menor">Edad:</label>
+                <input id="edad-menor" name="age" type="number" min="0" max="17" required>
+                <button id="agregar-menor" type="submit">Asociar menor</button>
+            </form>
+            <p id="mensaje-menores" role="status" aria-live="polite"></p>
+            <h2>Menores asociados</h2>
+            <ul id="lista-menores"></ul>
+            <section id="opciones-menor" hidden>
+                <h2 id="titulo-menor-seleccionado"></h2>
+                <ul>
+                    <li><a id="asistencia-menor" href="#">Confirmar asistencia</a></li>
+                    <li><a id="restricciones-menor" href="#">Informar restricciones alimentarias</a></li>
+                </ul>
+            </section>
+        </section>
+        <p data-event-status role="status" aria-live="polite"></p>
+    </main>
+    <footer>
+        <a data-event-link href="/perfiles/perfilInvitado/perfil.html">Volver al perfil del adulto</a>
+    </footer>
+    <script src="/event-context.js"></script>
+    <script>
+        const form = document.getElementById("form-menor");
+        const list = document.getElementById("lista-menores");
+        const message = document.getElementById("mensaje-menores");
+        const submitButton = document.getElementById("agregar-menor");
+        const selectedMinorId = new URLSearchParams(window.location.search).get("minor_id");
+        const user = window.pp1User;
+        const canManage = Boolean(
+            window.pp1EventId &&
+            user &&
+            user.role === "invitado" &&
+            user.event_id === window.pp1EventId &&
+            Number.isSafeInteger(user.id),
+        );
+        const minorsUrl = canManage
+            ? `/eventos/${encodeURIComponent(window.pp1EventId)}/invitados/${encodeURIComponent(user.id)}/menores`
+            : null;
+
+        if (!canManage) {
+            submitButton.disabled = true;
+            message.textContent = "Iniciá sesión con una cuenta de invitado para gestionar menores.";
+        } else {
+            loadMinors();
+        }
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            if (!canManage) {
+                return;
+            }
+
+            submitButton.disabled = true;
+            message.textContent = "Asociando menor...";
+            try {
+                const response = await fetch(minorsUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        name: form.elements.name.value,
+                        age: Number(form.elements.age.value),
+                    }),
+                });
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.detail || "No se pudo asociar al menor.");
+                }
+
+                form.reset();
+                await loadMinors(false);
+                message.textContent = "Menor asociado correctamente.";
+            } catch (error) {
+                message.textContent = error.message || "No se pudo conectar con el servidor.";
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+
+        async function loadMinors(showLoading = true) {
+            if (showLoading) {
+                message.textContent = "Cargando menores...";
+            }
+            try {
+                const response = await fetch(minorsUrl);
+                const minors = await response.json();
+                if (!response.ok) {
+                    throw new Error(minors.detail || "No se pudieron cargar los menores.");
+                }
+
+                list.replaceChildren();
+                for (const minor of minors) {
+                    const item = document.createElement("li");
+                    const details = document.createElement("span");
+                    details.textContent = `${minor.name}, ${minor.age} años `;
+                    const menuLink = document.createElement("a");
+                    const menuUrl = new URL(
+                        "/perfiles/perfilInvitado/opciones/menor/perfilMenor.html",
+                        window.location.origin,
+                    );
+                    menuUrl.searchParams.set("event_id", window.pp1EventId);
+                    menuUrl.searchParams.set("minor_id", minor.id);
+                    menuLink.href = menuUrl.toString();
+                    menuLink.textContent = "Gestionar";
+                    const removeButton = document.createElement("button");
+                    removeButton.type = "button";
+                    removeButton.textContent = "Desasociar";
+                    removeButton.addEventListener("click", () => removeMinor(minor, removeButton));
+                    item.append(details, menuLink, document.createTextNode(" "), removeButton);
+                    list.appendChild(item);
+                }
+                const selectedMinor = minors.find(
+                    (minor) => String(minor.id) === selectedMinorId,
+                );
+                if (selectedMinor) {
+                    document.getElementById("titulo-menor-seleccionado").textContent =
+                        `Opciones para ${selectedMinor.name}`;
+                    const optionPaths = {
+                        "asistencia-menor": "/perfiles/perfilInvitado/opciones/menor/asistenciaMenor.html",
+                        "restricciones-menor": "/perfiles/perfilInvitado/opciones/menor/restriccionesMenor.html",
+                    };
+                    for (const [linkId, path] of Object.entries(optionPaths)) {
+                        const link = document.getElementById(linkId);
+                        const target = new URL(path, window.location.origin);
+                        target.searchParams.set("event_id", window.pp1EventId);
+                        target.searchParams.set("minor_id", selectedMinor.id);
+                        link.href = target.toString();
+                    }
+                    document.getElementById("opciones-menor").hidden = false;
+                } else {
+                    document.getElementById("opciones-menor").hidden = true;
+                }
+                if (showLoading) {
+                    message.textContent = minors.length
+                        ? ""
+                        : "Todavía no asociaste menores a tu cuenta.";
+                }
+            } catch (error) {
+                message.textContent = error.message || "No se pudieron cargar los menores.";
+            }
+        }
+
+        async function removeMinor(minor, button) {
+            button.disabled = true;
+            message.textContent = "Desasociando menor...";
+            try {
+                const response = await fetch(
+                    `${minorsUrl}/${encodeURIComponent(minor.id)}`,
+                    { method: "DELETE" },
+                );
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.detail || "No se pudo desasociar al menor.");
+                }
+                await loadMinors(false);
+                message.textContent = "Menor desasociado correctamente.";
+            } catch (error) {
+                button.disabled = false;
+                message.textContent = error.message || "No se pudo conectar con el servidor.";
+            }
+        }
+    </script>
+</body>
+</html>

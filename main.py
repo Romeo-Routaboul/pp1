@@ -6,6 +6,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from python.eventos import EventNotFoundError, router as eventos_router
+from python.menores import router as menores_router
+from python.regalos import router as regalos_router
 from python.userLoginYRegist import (
 	DuplicateUsernameError,
 	InvalidCredentialsError,
@@ -16,6 +18,8 @@ from python.userLoginYRegist import (
 app = FastAPI()
 HTML_DIR = Path(__file__).resolve().parent / "html-css"
 app.include_router(eventos_router)
+app.include_router(regalos_router)
+app.include_router(menores_router)
 
 
 class Credentials(BaseModel):
@@ -26,7 +30,7 @@ class Credentials(BaseModel):
 class UserRegistration(Credentials):
 	username: str = Field(min_length=1, max_length=254)
 	role: Literal["invitado", "anfitrion"] = "invitado"
-	event_id: int | None = Field(default=None, gt=0)
+	event_id: int = Field(gt=0)
 	first_name: str | None = Field(default=None, max_length=80)
 	last_name: str | None = Field(default=None, max_length=80)
 
@@ -36,6 +40,15 @@ def html_response(file_path: Path):
 		return FileResponse(file_path, media_type="text/html")
 
 	return endpoint
+
+
+event_context_file = HTML_DIR / "event-context.js"
+app.add_api_route(
+	"/event-context.js",
+	lambda: FileResponse(event_context_file, media_type="application/javascript"),
+	methods=["GET"],
+	name="event_context",
+)
 
 
 # The landing page is available at the root URL.

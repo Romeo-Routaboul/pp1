@@ -9,6 +9,7 @@
 <body>
     <h1>Restricciones alimentarias</h1>
     <p>Informe aqui cualquier tipo de restrccion alimentaria</p>
+    <form data-event-required>
      <input type="checkbox" id="restrccion1" name="restrccion1" value="celiaco">
     <label for="restrccion1">soy celiaco</label><br>
     <input type="checkbox" id="restriccion2" name="restriccion2" value="lactosa">
@@ -19,7 +20,10 @@
     <label for="restriccion4">Soy vegano</label><br>
     <label for="name">Otra restriccion</label> 
     <input type="text" id="otro" name="otro" minlength="2" maxlength="100" size="25" /><br>
-    <input type="button" value="Enviar"> 
-    <footer> <a href="/perfiles/perfilInvitado/perfil.html">Volver al menu</a> </footer> 
+    <input type="button" value="Enviar">
+    </form>
+    <p data-event-status role="status" aria-live="polite"></p>
+    <footer> <a data-event-link href="/perfiles/perfilInvitado/perfil.html">Volver al menu</a> </footer>
+    <script src="/event-context.js"></script>
 </body>
 </html>

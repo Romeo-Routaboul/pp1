@@ -59,6 +59,22 @@
                     return;
                 }
 
+                if (role === "invitado" || role === "anfitrion" || role === "anfitrión") {
+                    const eventId = result.user.event_id;
+                    if (!Number.isSafeInteger(eventId) || eventId < 1) {
+                        loginMessage.textContent = "La cuenta no está asociada a ningún evento.";
+                        return;
+                    }
+                    try {
+                        sessionStorage.setItem("pp1User", JSON.stringify(result.user));
+                    } catch {
+                        loginMessage.textContent = "No se pudo guardar la sesión en este navegador.";
+                        return;
+                    }
+                    window.location.assign(`${profilePath}?event_id=${encodeURIComponent(eventId)}`);
+                    return;
+                }
+
                 window.location.assign(profilePath);
             } catch {
                 loginMessage.textContent = "No se pudo conectar con el servidor.";

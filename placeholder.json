@@ -20,8 +20,17 @@
     },
     {
       "id": 4,
-      "username": "jrani88@gmail.com",
-      "password_hash": "pbkdf2_sha256$600000$80b70d910cad8c2d08698625b13f8072$ebf521c91be9866f0c4356bccfd2da44af9575c07c632c40fa82716695553e2b",
+      "username": "FMastan@anfitrion.com",
+      "password_hash": "pbkdf2_sha256$600000$718823bb63ec21edd2c03d21cea47e62$735165c9d4d0f89cefd8533ffca75bdb8f5c1940e96f5c323307bce49f8711a9",
+      "role": "anfitrion",
+      "event_id": 1,
+      "first_name": "Franco",
+      "last_name": "Mastantuono"
+    },
+    {
+      "id": 5,
+      "username": "jrani@invitado.com",
+      "password_hash": "pbkdf2_sha256$600000$104cde28a85dec94ccd4078bb905403c$9896c766295f5481f0cc4bdcd0cc70dec50ce965096a37fce9ce1888afe78ce5",
       "role": "invitado",
       "event_id": 1,
       "first_name": "Juan",
@@ -35,9 +44,26 @@
       "guests": [
         {
           "user_id": 4,
-          "username": "jrani88@gmail.com",
+          "username": "FMastan@anfitrion.com",
+          "name": "Franco Mastantuono",
+          "role": "anfitrion"
+        },
+        {
+          "user_id": 5,
+          "username": "jrani@invitado.com",
           "name": "Juan Rani",
-          "role": "invitado"
+          "role": "invitado",
+          "menores": []
+        }
+      ],
+      "regalos": [
+        {
+          "name": "Gta6",
+          "description": "ahslkjfgasljkfgaslg",
+          "image_url": "https://http2.mlstatic.com/D_NQ_NP_2X_673686-MLA112576921980_062026-F.webp",
+          "purchase_url": "https://www.mercadolibre.com.ar/grand-theft-auto-vi-gta-vi-caja-fisica-con-codigo-de-descarga-para-ps5/p/MLA74108173#polycard_client=search-desktop&be_origin=backend&overlay_label=not_apply&search_layout=grid&position=1&type=product&tracking_id=1a968b40-fd06-472d-8af2-df0aa788da70&overlay_label_capability=not_apply&wid=MLA1859580411&sid=search&gid=1&pid=1",
+          "id": 1,
+          "reserved_by": null
         }
       ]
     },

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Regalos del evento</title>
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        .imagen-regalo {
+            max-width: 20vw;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Regalos del evento</h1>
+    <p>Elegí un regalo para indicar que vas a comprarlo.</p>
+    <ul id="lista-regalos"></ul>
+    <p id="mensaje-regalos" role="status" aria-live="polite"></p>
+    <p data-event-status role="status" aria-live="polite"></p>
+    <footer>
+        <a data-event-link href="/perfiles/perfilInvitado/perfil.html">Volver al menú del invitado</a>
+    </footer>
+    <script src="/event-context.js"></script>
+    <script>
+        const giftList = document.getElementById("lista-regalos");
+        const message = document.getElementById("mensaje-regalos");
+        const currentUser = window.pp1User;
+        const canReserve = Boolean(
+            window.pp1EventId &&
+            currentUser &&
+            currentUser.role === "invitado" &&
+            currentUser.event_id === window.pp1EventId &&
+            Number.isSafeInteger(currentUser.id),
+        );
+
+        if (window.pp1EventId) {
+            if (!canReserve) {
+                message.textContent = "Iniciá sesión con tu cuenta de invitado para elegir un regalo.";
+            }
+            loadGifts().catch((error) => {
+                message.textContent = error.message || "No se pudo cargar la lista de regalos.";
+            });
+        }
+
+        async function loadGifts() {
+            message.textContent = "Cargando regalos...";
+            const response = await fetch(
+                `/eventos/${encodeURIComponent(window.pp1EventId)}/regalos`,
+            );
+            const gifts = await response.json();
+            if (!response.ok) {
+                throw new Error(gifts.detail || "No se pudo cargar la lista de regalos.");
+            }
+
+            giftList.replaceChildren();
+            for (const gift of gifts) {
+                const item = document.createElement("li");
+                const name = document.createElement("h2");
+                name.textContent = gift.name;
+                const description = document.createElement("p");
+                description.textContent = gift.description;
+                const purchaseLink = document.createElement("a");
+                purchaseLink.href = gift.purchase_url;
+                purchaseLink.textContent = "Ver enlace de compra";
+                purchaseLink.target = "_blank";
+                purchaseLink.rel = "noopener noreferrer";
+                item.append(name, description);
+
+                if (gift.image_url) {
+                    const image = document.createElement("img");
+                    image.src = gift.image_url;
+                    image.alt = gift.name;
+                    image.loading = "lazy";
+                    image.className = "imagen-regalo";
+                    item.appendChild(image);
+                }
+
+                if (gift.reserved_by) {
+                    const reservation = document.createElement("p");
+                    reservation.textContent = gift.reserved_by.user_id === currentUser?.id
+                        ? "Ya indicaste que vas a comprar este regalo."
+                        : `Lo va a comprar: ${gift.reserved_by.name}`;
+                    item.appendChild(reservation);
+                    if (canReserve && gift.reserved_by.user_id === currentUser.id) {
+                        const cancelButton = document.createElement("button");
+                        cancelButton.type = "button";
+                        cancelButton.textContent = "Ya no voy a comprarlo";
+                        cancelButton.addEventListener(
+                            "click",
+                            () => cancelReservation(gift, cancelButton),
+                        );
+                        item.appendChild(cancelButton);
+                    }
+                } else {
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.textContent = "Voy a comprarlo";
+                    button.disabled = !canReserve;
+                    button.addEventListener("click", () => reserveGift(gift, button));
+                    item.appendChild(button);
+                }
+
+                item.appendChild(purchaseLink);
+                giftList.appendChild(item);
+            }
+
+            if (gifts.length === 0) {
+                message.textContent = "Todavía no hay regalos para este evento.";
+            } else if (canReserve) {
+                message.textContent = "";
+            }
+        }
+
+        async function reserveGift(gift, button) {
+            button.disabled = true;
+            message.textContent = "Actualizando la lista...";
+            try {
+                const response = await fetch(
+                    `/eventos/${encodeURIComponent(window.pp1EventId)}/regalos/${encodeURIComponent(gift.id)}/reservas`,
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ user_id: currentUser.id }),
+                    },
+                );
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.detail || "No se pudo reservar el regalo.");
+                }
+
+                await loadGifts();
+                message.textContent = "La lista se actualizó: el regalo figura a tu nombre.";
+            } catch (error) {
+                button.disabled = false;
+                message.textContent = error.message || "No se pudo conectar con el servidor.";
+                if (error.message && error.message.includes("ya fue reservado")) {
+                    await loadGifts();
+                }
+            }
+        }
+
+        async function cancelReservation(gift, button) {
+            button.disabled = true;
+            message.textContent = "Cancelando la reserva...";
+            try {
+                const response = await fetch(
+                    `/eventos/${encodeURIComponent(window.pp1EventId)}/regalos/${encodeURIComponent(gift.id)}/reservas/${encodeURIComponent(currentUser.id)}`,
+                    { method: "DELETE" },
+                );
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.detail || "No se pudo cancelar la reserva.");
+                }
+
+                await loadGifts();
+                message.textContent = "Ya no figuras como comprador de este regalo.";
+            } catch (error) {
+                button.disabled = false;
+                message.textContent = error.message || "No se pudo conectar con el servidor.";
+            }
+        }
+    </script>
+</body>
+</html>

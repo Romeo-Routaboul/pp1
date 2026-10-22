@@ -1,30 +1,96 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Asistencia del menor</title>
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
     <header> 
         <h1>Confirmar asistencia del menor</h1> 
     </header> 
-    <form>
-  <fieldset>
-    <legend>Asistirá el menor al evento?</legend>
-    <div>
-      <input type="radio" id="si" name="asistencia" value="si" />
-      <label for="si">Si</label>
-
-      <input type="radio" id="no" name="asistencia" value="no" />
-      <label for="no">No</label>
-    </div>
-    <div>
-      <button type="submit">Enviar</button>
-    </div>
-  </fieldset>
+    <h1 id="titulo-menor"></h1>
+    <form id="form-asistencia" data-event-required>
+        <fieldset>
+            <legend>¿Asistirá el menor al evento?</legend>
+            <input type="radio" id="si" name="asistencia" value="si" required>
+            <label for="si">Sí</label>
+            <input type="radio" id="no" name="asistencia" value="no">
+            <label for="no">No</label>
+            <button type="submit">Guardar</button>
+        </fieldset>
     </form>
-    <footer> <a href="/perfiles/perfilInvitado/opciones/menor/perfilMenor.html">Volver al menu</a> </footer> 
+    <p id="mensaje-menor" role="status" aria-live="polite"></p>
+    <p data-event-status role="status" aria-live="polite"></p>
+    <footer><a id="volver-menores" data-event-link href="/perfiles/perfilInvitado/opciones/menor/perfilMenor.html">Volver a menores</a></footer>
+    <script src="/event-context.js"></script>
+    <script>
+        const user = window.pp1User;
+        const params = new URLSearchParams(window.location.search);
+        const minorId = Number(params.get("minor_id"));
+        const form = document.getElementById("form-asistencia");
+        const message = document.getElementById("mensaje-menor");
+        const validContext = Boolean(
+            window.pp1EventId &&
+            user &&
+            user.role === "invitado" &&
+            user.event_id === window.pp1EventId &&
+            Number.isSafeInteger(user.id) &&
+            Number.isSafeInteger(minorId) &&
+            minorId > 0,
+        );
+        const minorsUrl = validContext
+            ? `/eventos/${encodeURIComponent(window.pp1EventId)}/invitados/${encodeURIComponent(user.id)}/menores`
+            : null;
+
+        if (validContext) {
+            const back = new URL(document.getElementById("volver-menores").href);
+            back.searchParams.set("event_id", window.pp1EventId);
+            back.searchParams.set("minor_id", minorId);
+            document.getElementById("volver-menores").href = back.toString();
+            loadMinor().catch((error) => {
+                message.textContent = error.message || "No se pudieron cargar los menores.";
+                form.querySelectorAll("input, button").forEach((control) => control.disabled = true);
+            });
+        } else {
+            form.querySelectorAll("input, button").forEach((control) => control.disabled = true);
+            message.textContent = "Seleccioná un menor desde el perfil del adulto.";
+        }
+
+        async function loadMinor() {
+            const response = await fetch(minorsUrl);
+            const minors = await response.json();
+            if (!response.ok) {
+                throw new Error(minors.detail || "No se pudieron cargar los menores.");
+            }
+            const minor = minors.find((item) => item.id === minorId);
+            if (!minor) {
+                throw new Error("El menor seleccionado no está asociado a tu cuenta.");
+            }
+            document.getElementById("titulo-menor").textContent = `Asistencia de ${minor.name}`;
+            if (minor.attendance) {
+                form.elements.asistencia.value = minor.attendance;
+            }
+        }
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            if (!validContext) return;
+            message.textContent = "Guardando asistencia...";
+            try {
+                const response = await fetch(`${minorsUrl}/${encodeURIComponent(minorId)}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ attendance: form.elements.asistencia.value }),
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.detail || "No se pudo guardar la asistencia.");
+                message.textContent = "Asistencia guardada correctamente.";
+            } catch (error) {
+                message.textContent = error.message || "No se pudo conectar con el servidor.";
+            }
+        });
+    </script>
 </body>
 </html>

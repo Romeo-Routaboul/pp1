@@ -5,57 +5,140 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lista de regalos</title>
     <link rel="stylesheet" href="/style.css">
+    <style>
+        .imagen-regalo {
+            max-width: 20vw;
+            height: auto;
+        }
+    </style>
 </head>
 <body>
+    <h1>Lista de regalos del evento</h1>
+    <section data-event-required>
+        <form id="form-regalo" data-event-required>
+            <label for="nombre-regalo">Nombre del regalo:</label>
+            <input type="text" id="nombre-regalo" maxlength="120" required>
 
-    <h1>Mi lista de regalos</h1>
+            <label for="descripcion-regalo">Descripción:</label>
+            <textarea id="descripcion-regalo" maxlength="1000" required></textarea>
 
-    <label for="regalo">Escribí un regalo:</label>
-    <input type="text" id="regalo">
+            <label for="imagen-regalo">Imagen (opcional, URL):</label>
+            <input type="url" id="imagen-regalo" maxlength="2048" placeholder="https://ejemplo.com/imagen.jpg">
 
-    <button onclick="agregarRegalo()">Agregar</button>
+            <label for="enlace-regalo">Enlace de compra:</label>
+            <input type="url" id="enlace-regalo" maxlength="2048" required>
 
-    <h2>Regalos que quiero recibir:</h2>
-
-    <ul id="listaRegalos">
-        <li>Juego de sabanas king size <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-        <li>set de platos <button onclick="this.parentElement.remove()" >Eliminar</button></li> 
-        <li>set de cubiertos <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-        <li>TV 43 pulgadas <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-        <li>Playstation 5 <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-        <li>Computadora portatil <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-        <li>Afeitadora electrica <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-        <li>Cafetera espresso <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-        <li>molinillo de café <button onclick="this.parentElement.remove()" >Eliminar</button></li>
-    </ul>
-
+            <button id="submit-regalo" type="submit">Agregar regalo</button>
+        </form>
+        <p id="mensaje-regalos" role="status" aria-live="polite"></p>
+        <h2>Regalos que quiero recibir:</h2>
+        <ul id="lista-regalos"></ul>
+    </section>
+    <p data-event-status role="status" aria-live="polite"></p>
+    <footer>
+        <a data-event-link href="/perfiles/perfilAnfitrion/perfil.html">Volver al menú</a>
+    </footer>
+    <script src="/event-context.js"></script>
     <script>
-        function agregarRegalo() {
-            let input = document.getElementById("regalo");
-            let regalo = input.value;
+        const form = document.getElementById("form-regalo");
+        const giftList = document.getElementById("lista-regalos");
+        const message = document.getElementById("mensaje-regalos");
+        const submitButton = document.getElementById("submit-regalo");
 
-            if (regalo !== "") {
+        if (window.pp1EventId) {
+            loadGifts().catch((error) => {
+                message.textContent = error.message || "No se pudo cargar la lista de regalos.";
+            });
+        }
 
-                let nuevoRegalo = document.createElement("li");
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            if (!window.pp1EventId) {
+                return;
+            }
 
-                nuevoRegalo.textContent = regalo;
+            message.textContent = "Agregando regalo...";
+            submitButton.disabled = true;
+            try {
+                const response = await fetch(
+                    `/eventos/${encodeURIComponent(window.pp1EventId)}/regalos`,
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            name: form.elements["nombre-regalo"].value,
+                            description: form.elements["descripcion-regalo"].value,
+                            image_url: form.elements["imagen-regalo"].value || null,
+                            purchase_url: form.elements["enlace-regalo"].value,
+                        }),
+                    },
+                );
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.detail || "No se pudo agregar el regalo.");
+                }
 
-                let botonEliminar = document.createElement("button");
+                form.reset();
+                await loadGifts(false);
+                message.textContent = "Regalo agregado correctamente.";
+            } catch (error) {
+                message.textContent = error.message || "No se pudo conectar con el servidor.";
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
 
-                botonEliminar.textContent = "Eliminar";
+        async function loadGifts(showLoading = true) {
+            if (showLoading) {
+                message.textContent = "Cargando regalos...";
+            }
+            try {
+                const response = await fetch(
+                    `/eventos/${encodeURIComponent(window.pp1EventId)}/regalos`,
+                );
+                const gifts = await response.json();
+                if (!response.ok) {
+                    throw new Error(gifts.detail || "No se pudo cargar la lista de regalos.");
+                }
 
-                botonEliminar.onclick = function() {
-                    nuevoRegalo.remove();
-                };
+                giftList.replaceChildren();
+                for (const gift of gifts) {
+                    const item = document.createElement("li");
+                    const name = document.createElement("h3");
+                    name.textContent = gift.name;
+                    const description = document.createElement("p");
+                    description.textContent = gift.description;
+                    const reservation = document.createElement("p");
+                    reservation.textContent = gift.reserved_by
+                        ? `Lo va a comprar: ${gift.reserved_by.name}`
+                        : "Todavía no lo reservó ningún invitado.";
+                    const purchaseLink = document.createElement("a");
+                    purchaseLink.href = gift.purchase_url;
+                    purchaseLink.textContent = "Ver enlace de compra";
+                    purchaseLink.target = "_blank";
+                    purchaseLink.rel = "noopener noreferrer";
+                    item.append(name, description, reservation);
 
-                nuevoRegalo.appendChild(botonEliminar);
-
-                document.getElementById("listaRegalos").appendChild(nuevoRegalo);
-
-                input.value = "";
+                    if (gift.image_url) {
+                        const image = document.createElement("img");
+                        image.src = gift.image_url;
+                        image.alt = gift.name;
+                        image.loading = "lazy";
+                        image.className = "imagen-regalo";
+                        item.appendChild(image);
+                    }
+                    item.appendChild(purchaseLink);
+                    giftList.appendChild(item);
+                }
+                if (showLoading) {
+                    message.textContent = gifts.length
+                        ? ""
+                        : "Todavía no hay regalos para este evento.";
+                }
+            } catch (error) {
+                throw new Error(error.message || "No se pudo cargar la lista de regalos.");
             }
         }
     </script>
-    <footer> <a href="/perfiles/perfilAnfitrion/perfil.html">Volver atras</a> </footer> </body> </html>
 </body>
 </html>

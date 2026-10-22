@@ -143,6 +143,15 @@ class JsonEventRepository:
                 raise GuestNotFoundError
 
             guest = guests.pop(guest_index)
+            gifts = event.get("regalos", [])
+            if not isinstance(gifts, list):
+                raise ValueError("La lista de regalos del evento es inválida.")
+            for gift in gifts:
+                if not isinstance(gift, dict):
+                    raise ValueError("La lista de regalos del evento es inválida.")
+                reserved_by = gift.get("reserved_by")
+                if isinstance(reserved_by, dict) and reserved_by.get("user_id") == user_id:
+                    gift["reserved_by"] = None
             data["users"] = [
                 user
                 for user in users

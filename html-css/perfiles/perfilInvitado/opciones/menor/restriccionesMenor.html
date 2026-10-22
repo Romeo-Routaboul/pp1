@@ -1,25 +1,103 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Restricciones alimentarias del menor</title>
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-    <h1>Restricciones alimentarias del menor</h1>
-    <p>Informe aqui cualquier tipo de restrccion alimentaria del menor a cargo</p>
-     <input type="checkbox" id="restrccion1" name="restrccion1" value="celiaco">
-    <label for="restrccion1">Es celiaco</label><br>
-    <input type="checkbox" id="restriccion2" name="restriccion2" value="lactosa">
-    <label for="restriccion2"> Es intolerante a la lactosa</label><br>
-    <input type="checkbox" id="restriccion3" name="restriccion3" value="vegetariano">
-    <label for="restriccion3">Es vegetariano</label><br>
-    <input type="checkbox" id="restriccion4" name="restriccion4" value="vegano">
-    <label for="restriccion4">Es vegano</label><br>
-    <label for="name">Otra restricción</label> 
-    <input type="text" id="otro" name="otro" minlength="2" maxlength="100" size="25" /><br>
-    <input type="button" value="Enviar"> 
-    <footer> <a href="/perfiles/perfilInvitado/opciones/menor/perfilMenor.html">Volver al menu</a> </footer> 
+    <h1 id="titulo-menor">Restricciones alimentarias del menor</h1>
+    <p>Informá cualquier restricción alimentaria del menor a cargo.</p>
+    <form id="form-restricciones" data-event-required>
+    <input type="checkbox" id="restriccion-celiaco" name="restrictions" value="celiaco">
+    <label for="restriccion-celiaco">Es celíaco</label><br>
+    <input type="checkbox" id="restriccion-lactosa" name="restrictions" value="lactosa">
+    <label for="restriccion-lactosa">Es intolerante a la lactosa</label><br>
+    <input type="checkbox" id="restriccion-vegetariano" name="restrictions" value="vegetariano">
+    <label for="restriccion-vegetariano">Es vegetariano</label><br>
+    <input type="checkbox" id="restriccion-vegano" name="restrictions" value="vegano">
+    <label for="restriccion-vegano">Es vegano</label><br>
+    <label for="otro">Otra restricción</label>
+    <input type="text" id="otro" name="other_restriction" maxlength="500"><br>
+    <button type="submit">Guardar</button>
+    </form>
+    <p id="mensaje-menor" role="status" aria-live="polite"></p>
+    <p data-event-status role="status" aria-live="polite"></p>
+    <footer><a id="volver-menores" data-event-link href="/perfiles/perfilInvitado/opciones/menor/perfilMenor.html">Volver a menores</a></footer>
+    <script src="/event-context.js"></script>
+    <script>
+        const user = window.pp1User;
+        const params = new URLSearchParams(window.location.search);
+        const minorId = Number(params.get("minor_id"));
+        const form = document.getElementById("form-restricciones");
+        const message = document.getElementById("mensaje-menor");
+        const validContext = Boolean(
+            window.pp1EventId &&
+            user &&
+            user.role === "invitado" &&
+            user.event_id === window.pp1EventId &&
+            Number.isSafeInteger(user.id) &&
+            Number.isSafeInteger(minorId) &&
+            minorId > 0,
+        );
+        const minorsUrl = validContext
+            ? `/eventos/${encodeURIComponent(window.pp1EventId)}/invitados/${encodeURIComponent(user.id)}/menores`
+            : null;
+
+        if (validContext) {
+            const back = new URL(document.getElementById("volver-menores").href);
+            back.searchParams.set("event_id", window.pp1EventId);
+            back.searchParams.set("minor_id", minorId);
+            document.getElementById("volver-menores").href = back.toString();
+            loadMinor();
+        } else {
+            form.querySelectorAll("input, button").forEach((control) => control.disabled = true);
+            message.textContent = "Seleccioná un menor desde el perfil del adulto.";
+        }
+
+        async function loadMinor() {
+            try {
+                const response = await fetch(minorsUrl);
+                const minors = await response.json();
+                if (!response.ok) throw new Error(minors.detail || "No se pudieron cargar los menores.");
+                const minor = minors.find((item) => item.id === minorId);
+                if (!minor) throw new Error("El menor seleccionado no está asociado a tu cuenta.");
+                document.getElementById("titulo-menor").textContent =
+                    `Restricciones alimentarias de ${minor.name}`;
+                for (const checkbox of form.querySelectorAll('input[name="restrictions"]')) {
+                    checkbox.checked = minor.restrictions.includes(checkbox.value);
+                }
+                form.elements.other_restriction.value = minor.other_restriction || "";
+            } catch (error) {
+                message.textContent = error.message || "No se pudieron cargar los menores.";
+                form.querySelectorAll("input, button").forEach((control) => control.disabled = true);
+            }
+        }
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            if (!validContext) return;
+            message.textContent = "Guardando restricciones...";
+            try {
+                const response = await fetch(`${minorsUrl}/${encodeURIComponent(minorId)}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        restrictions: Array.from(
+                            form.querySelectorAll('input[name="restrictions"]:checked'),
+                            (input) => input.value,
+                        ),
+                        other_restriction: form.elements.other_restriction.value,
+                    }),
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.detail || "No se pudieron guardar las restricciones.");
+                message.textContent = "Restricciones guardadas correctamente.";
+            } catch (error) {
+                message.textContent = error.message || "No se pudo conectar con el servidor.";
+            }
+        });
+    </script>
 </body>
 </html>
