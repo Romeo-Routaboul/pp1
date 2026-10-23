@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Entorno virtual de Python
+venv/
+.venv/
+env/
+
+# Variables de entorno y configuración sensible
+.env
+
+# Cache de pytest
+.pytest_cache
+
+# Sistemas operativos
+.DS_Store        # macOS
+Thumbs.db        # Windows
+
+# Node.js (por si se utiliza npm en algún momento)
+node_modules/
