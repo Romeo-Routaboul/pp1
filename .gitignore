@@ -20,3 +20,5 @@ Thumbs.db        # Windows
 
 # Node.js (por si se utiliza npm en algún momento)
 node_modules/
+
+DB.ini
