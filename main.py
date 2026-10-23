@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from python.eventos import EventNotFoundError, router as eventos_router
 from python.menores import router as menores_router
+from python.mesas import router as mesas_router
 from python.regalos import router as regalos_router
 from python.userLoginYRegist import (
 	DuplicateUsernameError,
@@ -20,6 +21,7 @@ HTML_DIR = Path(__file__).resolve().parent / "html-css"
 app.include_router(eventos_router)
 app.include_router(regalos_router)
 app.include_router(menores_router)
+app.include_router(mesas_router)
 
 
 class Credentials(BaseModel):

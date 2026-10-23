@@ -7,18 +7,6 @@
       "role": "admin"
     },
     {
-      "id": 2,
-      "username": "anfitrion",
-      "password_hash": "pbkdf2_sha256$600000$ea530a53a5f5270a581a352638a8e418$9b7535e411669b7b3e4291edfb3922808cd8cc884d9e5e15ecc03d17da143ca1",
-      "role": "anfitrion"
-    },
-    {
-      "id": 3,
-      "username": "invitado",
-      "password_hash": "pbkdf2_sha256$600000$76e24af8148153934f3b6266484eb8f6$6cba1baa8ad21d8f6f4fff8b9b32ad50dfb3fc374e1514a1b66b00b22eb2ed27",
-      "role": "invitado"
-    },
-    {
       "id": 4,
       "username": "Franco@anfitrion.com",
       "password_hash": "pbkdf2_sha256$600000$e871736003f1f5b379ab9bdeeddc3e63$9b69962990d1ed5c48676becea3ed7787e2836528362fea075d5fde2b6f0c1b9",
@@ -102,6 +90,42 @@
             "lactosa"
           ],
           "other_restriction": ""
+        }
+      ],
+      "mesas": [
+        {
+          "id": 1,
+          "name": "Familia",
+          "seat_count": 1,
+          "assignments": [
+            {
+              "seat_number": 1,
+              "guest_id": 4,
+              "minor_id": null
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "name": "Amigos",
+          "seat_count": 3,
+          "assignments": [
+            {
+              "seat_number": 1,
+              "guest_id": 5,
+              "minor_id": null
+            },
+            {
+              "seat_number": 2,
+              "guest_id": 6,
+              "minor_id": null
+            },
+            {
+              "seat_number": 3,
+              "guest_id": 5,
+              "minor_id": 1
+            }
+          ]
         }
       ]
     },

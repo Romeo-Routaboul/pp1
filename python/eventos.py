@@ -1,16 +1,12 @@
 import json
-import os
-import tempfile
-from pathlib import Path
 from typing import Literal, TypedDict
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
-from python.placeholder_storage import PLACEHOLDER_LOCK
+from python.DB import database_transaction, decode_json
 
 
-PLACEHOLDER_PATH = Path(__file__).resolve().parent.parent / "placeholder.json"
 router = APIRouter(prefix="/eventos", tags=["eventos"])
 
 
@@ -57,109 +53,57 @@ class GuestProfileUpdate(BaseModel):
         return restriction.strip() if restriction is not None else None
 
 
-class JsonEventRepository:
-    def __init__(self, path: Path):
-        self.path = path
-
-    def _read_data(self) -> dict[str, object]:
-        if not self.path.exists():
-            return {"events": []}
-
-        with self.path.open("r", encoding="utf-8") as events_file:
-            data = json.load(events_file)
-        if not isinstance(data, dict):
-            raise ValueError("El archivo debe contener un objeto JSON.")
-
-        events = data.get("events", [])
-        if not isinstance(events, list) or any(
-            not isinstance(event, dict)
-            or not isinstance(event.get("id"), int)
-            or not isinstance(event.get("name"), str)
-            for event in events
-        ):
-            raise ValueError("El archivo contiene una lista de eventos inválida.")
-        data["events"] = events
-        return data
-
-    def _write_data(self, data: dict[str, object]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary_path: str | None = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                dir=self.path.parent,
-                delete=False,
-            ) as events_file:
-                temporary_path = events_file.name
-                json.dump(data, events_file, ensure_ascii=False, indent=2)
-                events_file.write("\n")
-            os.replace(temporary_path, self.path)
-        finally:
-            if temporary_path is not None and os.path.exists(temporary_path):
-                os.unlink(temporary_path)
-
+class MySQLEventRepository:
     def list_events(self) -> list[EventRecord]:
-        with PLACEHOLDER_LOCK:
-            data = self._read_data()
-            return [
-                {"id": event["id"], "name": event["name"]}
-                for event in data["events"]
-            ]
+        with database_transaction() as (_, cursor):
+            cursor.execute("SELECT id, name FROM events ORDER BY id")
+            return cursor.fetchall()
 
     def create_event(self, name: str) -> EventRecord:
-        with PLACEHOLDER_LOCK:
-            data = self._read_data()
-            events = data["events"]
-            event: EventRecord = {
-                "id": max((int(item["id"]) for item in events), default=0) + 1,
-                "name": name,
-            }
-            events.append({**event, "guests": []})
-            self._write_data(data)
-            return event
+        with database_transaction() as (_, cursor):
+            cursor.execute("INSERT INTO events (name) VALUES (%s)", (name,))
+            return {"id": cursor.lastrowid, "name": name}
 
     def list_event_guests(self, event_id: int) -> list[dict[str, object]]:
-        with PLACEHOLDER_LOCK:
-            data = self._read_data()
-            event = next(
-                (item for item in data["events"] if item["id"] == event_id),
-                None,
-            )
-            if event is None:
+        with database_transaction() as (_, cursor):
+            cursor.execute("SELECT id FROM events WHERE id = %s", (event_id,))
+            if cursor.fetchone() is None:
                 raise EventNotFoundError
-
-            guests = event.get("guests", [])
-            if not isinstance(guests, list):
-                raise ValueError("La lista de invitados del evento es inválida.")
+            cursor.execute(
+                """
+                SELECT u.id AS user_id, u.username,
+                       TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) AS name,
+                       u.role, p.attendance, p.restrictions, p.other_restriction
+                FROM event_guest_profiles AS p
+                JOIN users AS u ON u.id = p.user_id
+                WHERE p.event_id = %s
+                ORDER BY u.id
+                """,
+                (event_id,),
+            )
+            guests = cursor.fetchall()
+            for guest in guests:
+                guest["restrictions"] = decode_json(guest["restrictions"], [])
             return guests
 
     def get_guest_profile(self, event_id: int, user_id: int) -> dict[str, object]:
-        with PLACEHOLDER_LOCK:
-            data = self._read_data()
-            event = next(
-                (item for item in data["events"] if item["id"] == event_id),
-                None,
-            )
-            if event is None:
+        with database_transaction() as (_, cursor):
+            cursor.execute("SELECT id FROM events WHERE id = %s", (event_id,))
+            if cursor.fetchone() is None:
                 raise EventNotFoundError
-            guests = event.get("guests", [])
-            if not isinstance(guests, list):
-                raise ValueError("La lista de invitados del evento es inválida.")
-            guest = next(
-                (
-                    item for item in guests
-                    if isinstance(item, dict) and item.get("user_id") == user_id
-                ),
-                None,
+            cursor.execute(
+                """
+                SELECT attendance, restrictions, other_restriction
+                FROM event_guest_profiles
+                WHERE event_id = %s AND user_id = %s
+                """,
+                (event_id, user_id),
             )
-            if guest is None:
+            profile = cursor.fetchone()
+            if profile is None:
                 raise GuestNotFoundError
-            return {
-                "attendance": guest.get("attendance"),
-                "restrictions": guest.get("restrictions", []),
-                "other_restriction": guest.get("other_restriction", ""),
-            }
+            profile["restrictions"] = decode_json(profile["restrictions"], [])
+            return profile
 
     def update_guest_profile(
         self,
@@ -167,97 +111,94 @@ class JsonEventRepository:
         user_id: int,
         updates: dict[str, object],
     ) -> dict[str, object]:
-        with PLACEHOLDER_LOCK:
-            data = self._read_data()
-            event = next(
-                (item for item in data["events"] if item["id"] == event_id),
-                None,
-            )
-            if event is None:
+        columns = {
+            "attendance": "attendance",
+            "restrictions": "restrictions",
+            "other_restriction": "other_restriction",
+        }
+        with database_transaction() as (_, cursor):
+            cursor.execute("SELECT id FROM events WHERE id = %s", (event_id,))
+            if cursor.fetchone() is None:
                 raise EventNotFoundError
-            guests = event.get("guests", [])
-            if not isinstance(guests, list):
-                raise ValueError("La lista de invitados del evento es inválida.")
-            guest = next(
-                (
-                    item for item in guests
-                    if isinstance(item, dict) and item.get("user_id") == user_id
-                ),
-                None,
+            assignments: list[str] = []
+            parameters: list[object] = []
+            for field, value in updates.items():
+                column = columns.get(field)
+                if column is None:
+                    continue
+                assignments.append(f"{column} = %s")
+                parameters.append(json.dumps(value, ensure_ascii=False) if field == "restrictions" else value)
+            if assignments:
+                cursor.execute(
+                    f"""
+                    UPDATE event_guest_profiles
+                    SET {", ".join(assignments)}
+                    WHERE event_id = %s AND user_id = %s
+                    """,
+                    (*parameters, event_id, user_id),
+                )
+                if cursor.rowcount == 0:
+                    cursor.execute(
+                        "SELECT user_id FROM event_guest_profiles WHERE event_id = %s AND user_id = %s",
+                        (event_id, user_id),
+                    )
+                    if cursor.fetchone() is None:
+                        raise GuestNotFoundError
+            cursor.execute(
+                """
+                SELECT attendance, restrictions, other_restriction
+                FROM event_guest_profiles
+                WHERE event_id = %s AND user_id = %s
+                """,
+                (event_id, user_id),
             )
-            if guest is None:
+            profile = cursor.fetchone()
+            if profile is None:
                 raise GuestNotFoundError
-            guest.update(updates)
-            self._write_data(data)
-            return {
-                "attendance": guest.get("attendance"),
-                "restrictions": guest.get("restrictions", []),
-                "other_restriction": guest.get("other_restriction", ""),
-            }
+            profile["restrictions"] = decode_json(profile["restrictions"], [])
+            return profile
 
     def delete_event_guest(self, event_id: int, user_id: int) -> dict[str, object]:
-        with PLACEHOLDER_LOCK:
-            data = self._read_data()
-            event = next(
-                (item for item in data["events"] if item["id"] == event_id),
-                None,
-            )
-            if event is None:
+        with database_transaction() as (_, cursor):
+            cursor.execute("SELECT id FROM events WHERE id = %s", (event_id,))
+            if cursor.fetchone() is None:
                 raise EventNotFoundError
-
-            guests = event.get("guests", [])
-            users = data.get("users", [])
-            if not isinstance(guests, list) or not isinstance(users, list):
-                raise ValueError("Los datos de invitados del evento son inválidos.")
-
-            guest_index = next(
-                (
-                    index
-                    for index, guest in enumerate(guests)
-                    if isinstance(guest, dict) and guest.get("user_id") == user_id
-                ),
-                None,
+            cursor.execute(
+                """
+                SELECT u.id AS user_id, u.username,
+                       TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) AS name,
+                       u.role, p.attendance, p.restrictions, p.other_restriction
+                FROM event_guest_profiles AS p
+                JOIN users AS u ON u.id = p.user_id
+                WHERE p.event_id = %s AND p.user_id = %s
+                """,
+                (event_id, user_id),
             )
-            if guest_index is None:
+            guest = cursor.fetchone()
+            if guest is None:
                 raise GuestNotFoundError
-
-            guest = guests.pop(guest_index)
-            minors = event.get("menores", [])
-            if not isinstance(minors, list) or any(not isinstance(minor, dict) for minor in minors):
-                raise ValueError("La lista de menores del evento es inválida.")
-            remaining_minors = []
-            for minor in minors:
-                adult_ids = minor.get("adult_ids", [])
-                if not isinstance(adult_ids, list):
-                    raise ValueError("La lista de adultos asociados al menor es inválida.")
-                minor["adult_ids"] = [adult_id for adult_id in adult_ids if adult_id != user_id]
-                if minor["adult_ids"]:
-                    remaining_minors.append(minor)
-            event["menores"] = remaining_minors
-
-            gifts = event.get("regalos", [])
-            if not isinstance(gifts, list):
-                raise ValueError("La lista de regalos del evento es inválida.")
-            for gift in gifts:
-                if not isinstance(gift, dict):
-                    raise ValueError("La lista de regalos del evento es inválida.")
-                reserved_by = gift.get("reserved_by")
-                if isinstance(reserved_by, dict) and reserved_by.get("user_id") == user_id:
-                    gift["reserved_by"] = None
-            data["users"] = [
-                user
-                for user in users
-                if not (
-                    isinstance(user, dict)
-                    and user.get("id") == user_id
-                    and user.get("event_id") == event_id
+            guest["restrictions"] = decode_json(guest["restrictions"], [])
+            cursor.execute(
+                "DELETE FROM users WHERE id = %s AND event_id = %s",
+                (user_id, event_id),
+            )
+            if cursor.rowcount == 0:
+                cursor.execute(
+                    "DELETE FROM event_guest_profiles WHERE event_id = %s AND user_id = %s",
+                    (event_id, user_id),
                 )
-            ]
-            self._write_data(data)
+            cursor.execute(
+                """
+                DELETE m FROM minors AS m
+                LEFT JOIN minor_adults AS ma ON ma.event_id = m.event_id AND ma.minor_id = m.id
+                WHERE m.event_id = %s AND ma.minor_id IS NULL
+                """,
+                (event_id,),
+            )
             return guest
 
 
-event_repository = JsonEventRepository(PLACEHOLDER_PATH)
+event_repository = MySQLEventRepository()
 
 
 @router.get("")

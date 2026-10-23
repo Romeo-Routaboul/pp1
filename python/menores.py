@@ -1,16 +1,12 @@
 import json
-import os
-import tempfile
-from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
-from python.placeholder_storage import PLACEHOLDER_LOCK
+from python.DB import database_transaction, decode_json
 
 
-PLACEHOLDER_PATH = Path(__file__).resolve().parent.parent / "placeholder.json"
 router = APIRouter(prefix="/eventos", tags=["menores"])
 
 
@@ -62,121 +58,42 @@ class MinorUpdate(BaseModel):
     other_restriction: str | None = Field(default=None, max_length=500)
 
 
-class JsonMinorRepository:
-    def __init__(self, path: Path):
-        self.path = path
-
-    def _read_data(self) -> dict[str, object]:
-        if not self.path.exists():
-            return {"events": []}
-        with self.path.open("r", encoding="utf-8") as data_file:
-            data = json.load(data_file)
-        if not isinstance(data, dict):
-            raise ValueError("El archivo debe contener un objeto JSON.")
-        events = data.get("events", [])
-        if not isinstance(events, list) or any(
-            not isinstance(event, dict)
-            or not isinstance(event.get("id"), int)
-            or not isinstance(event.get("name"), str)
-            for event in events
-        ):
-            raise ValueError("El archivo contiene una lista de eventos inválida.")
-        data["events"] = events
-        return data
-
-    def _write_data(self, data: dict[str, object]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary_path: str | None = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                dir=self.path.parent,
-                delete=False,
-            ) as data_file:
-                temporary_path = data_file.name
-                json.dump(data, data_file, ensure_ascii=False, indent=2)
-                data_file.write("\n")
-            os.replace(temporary_path, self.path)
-        finally:
-            if temporary_path is not None and os.path.exists(temporary_path):
-                os.unlink(temporary_path)
-
+class MySQLMinorRepository:
     @staticmethod
-    def _find_adult_guest(event: dict[str, object], user_id: int) -> dict[str, object]:
-        guests = event.get("guests", [])
-        if not isinstance(guests, list):
-            raise ValueError("La lista de invitados del evento es inválida.")
-        guest = next(
-            (
-                item for item in guests
-                if isinstance(item, dict)
-                and item.get("user_id") == user_id
-                and item.get("role") == "invitado"
-            ),
-            None,
-        )
-        if guest is None:
-            raise AdultGuestNotFoundError
-        return guest
-
-    @staticmethod
-    def _event_minors(event: dict[str, object]) -> list[dict[str, object]]:
-        guests = event.get("guests", [])
-        if not isinstance(guests, list):
-            raise ValueError("La lista de invitados del evento es inválida.")
-
-        minors = event.setdefault("menores", [])
-        if not isinstance(minors, list) or any(not isinstance(minor, dict) for minor in minors):
-            raise ValueError("La lista de menores del evento es inválida.")
-
-        for minor in minors:
-            adult_ids = minor.get("adult_ids", [])
-            if not isinstance(adult_ids, list) or any(not isinstance(item, int) for item in adult_ids):
-                raise ValueError("La lista de adultos asociados al menor es inválida.")
-
-        next_id = max((int(minor.get("id", 0)) for minor in minors), default=0) + 1
-        for guest in guests:
-            if not isinstance(guest, dict):
-                raise ValueError("La lista de invitados del evento es inválida.")
-            legacy_minors = guest.pop("menores", [])
-            if not isinstance(legacy_minors, list) or any(
-                not isinstance(minor, dict) for minor in legacy_minors
-            ):
-                raise ValueError("La lista de menores del invitado es inválida.")
-            user_id = guest.get("user_id")
-            if not isinstance(user_id, int):
-                continue
-            for legacy_minor in legacy_minors:
-                migrated_minor = dict(legacy_minor)
-                migrated_minor["id"] = next_id
-                migrated_minor["adult_ids"] = [user_id]
-                minors.append(migrated_minor)
-                next_id += 1
-        return minors
-
-    @staticmethod
-    def _find_event(data: dict[str, object], event_id: int) -> dict[str, object]:
-        events = data["events"]
-        event = next(
-            (item for item in events if isinstance(item, dict) and item.get("id") == event_id),
-            None,
-        )
-        if event is None:
-            raise EventNotFoundError
-        return event
+    def _event_exists(cursor: object, event_id: int) -> bool:
+        cursor.execute("SELECT id FROM events WHERE id = %s", (event_id,))
+        return cursor.fetchone() is not None
 
     def list_minors(self, event_id: int, user_id: int) -> list[dict[str, object]]:
-        with PLACEHOLDER_LOCK:
-            data = self._read_data()
-            event = self._find_event(data, event_id)
-            self._find_adult_guest(event, user_id)
-            minors = [
-                minor for minor in self._event_minors(event)
-                if user_id in minor.get("adult_ids", [])
-            ]
-            self._write_data(data)
-            return minors
+        with database_transaction() as (_, cursor):
+            if not self._event_exists(cursor, event_id):
+                raise EventNotFoundError
+            cursor.execute(
+                """
+                SELECT m.id, m.name, m.age, m.attendance, m.restrictions,
+                       m.other_restriction, ma.user_id AS adult_id
+                FROM event_guest_profiles AS p
+                JOIN users AS u ON u.id = p.user_id
+                JOIN minor_adults AS ma ON ma.event_id = p.event_id AND ma.user_id = p.user_id
+                JOIN minors AS m ON m.event_id = ma.event_id AND m.id = ma.minor_id
+                WHERE p.event_id = %s AND p.user_id = %s AND u.role = 'invitado'
+                ORDER BY m.id
+                """,
+                (event_id, user_id),
+            )
+            rows = cursor.fetchall()
+            if not rows:
+                cursor.execute(
+                    """
+                    SELECT u.id FROM event_guest_profiles AS p
+                    JOIN users AS u ON u.id = p.user_id
+                    WHERE p.event_id = %s AND p.user_id = %s AND u.role = 'invitado'
+                    """,
+                    (event_id, user_id),
+                )
+                if cursor.fetchone() is None:
+                    raise AdultGuestNotFoundError
+            return self._group_minors(rows)
 
     def create_minor(self, event_id: int, user_id: int, minor_data: MinorCreate) -> dict[str, object]:
         return self.create_minor_for_adults(
@@ -186,12 +103,42 @@ class JsonMinorRepository:
         )
 
     def list_event_minors(self, event_id: int) -> list[dict[str, object]]:
-        with PLACEHOLDER_LOCK:
-            data = self._read_data()
-            event = self._find_event(data, event_id)
-            minors = self._event_minors(event)
-            self._write_data(data)
-            return minors
+        with database_transaction() as (_, cursor):
+            if not self._event_exists(cursor, event_id):
+                raise EventNotFoundError
+            cursor.execute(
+                """
+                SELECT m.id, m.name, m.age, m.attendance, m.restrictions,
+                       m.other_restriction, ma.user_id AS adult_id
+                FROM minors AS m
+                LEFT JOIN minor_adults AS ma ON ma.event_id = m.event_id AND ma.minor_id = m.id
+                WHERE m.event_id = %s
+                ORDER BY m.id, ma.user_id
+                """,
+                (event_id,),
+            )
+            return self._group_minors(cursor.fetchall())
+
+    @staticmethod
+    def _group_minors(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+        grouped: dict[int, dict[str, object]] = {}
+        for row in rows:
+            minor_id = int(row["id"])
+            minor = grouped.setdefault(
+                minor_id,
+                {
+                    "id": minor_id,
+                    "name": row["name"],
+                    "age": row["age"],
+                    "adult_ids": [],
+                    "attendance": row["attendance"],
+                    "restrictions": decode_json(row["restrictions"], []),
+                    "other_restriction": row["other_restriction"],
+                },
+            )
+            if row.get("adult_id") is not None:
+                minor["adult_ids"].append(row["adult_id"])
+        return list(grouped.values())
 
     def create_minor_for_adults(
         self,
@@ -199,23 +146,36 @@ class JsonMinorRepository:
         adult_ids: list[int],
         minor_data: MinorAssignment,
     ) -> dict[str, object]:
-        with PLACEHOLDER_LOCK:
-            data = self._read_data()
-            event = self._find_event(data, event_id)
-            guests = event.get("guests", [])
-            if not isinstance(guests, list):
-                raise ValueError("La lista de invitados del evento es inválida.")
-            valid_adult_ids = {
-                guest.get("user_id")
-                for guest in guests
-                if isinstance(guest, dict) and guest.get("role") == "invitado"
-            }
-            if any(adult_id not in valid_adult_ids for adult_id in adult_ids):
+        with database_transaction() as (_, cursor):
+            if not self._event_exists(cursor, event_id):
+                raise EventNotFoundError
+            placeholders = ", ".join("%s" for _ in adult_ids)
+            cursor.execute(
+                f"""
+                SELECT COUNT(*) AS total
+                FROM event_guest_profiles AS p
+                JOIN users AS u ON u.id = p.user_id
+                WHERE p.event_id = %s AND p.user_id IN ({placeholders})
+                    AND u.role = 'invitado'
+                """,
+                (event_id, *adult_ids),
+            )
+            if cursor.fetchone()["total"] != len(adult_ids):
                 raise InvalidMinorAdultAssignmentError
-
-            minors = self._event_minors(event)
-            minor: dict[str, object] = {
-                "id": max((int(item.get("id", 0)) for item in minors), default=0) + 1,
+            cursor.execute(
+                """
+                INSERT INTO minors (event_id, name, age, attendance, restrictions, other_restriction)
+                VALUES (%s, %s, %s, NULL, JSON_ARRAY(), '')
+                """,
+                (event_id, minor_data.name, minor_data.age),
+            )
+            minor_id = cursor.lastrowid
+            cursor.executemany(
+                "INSERT INTO minor_adults (event_id, minor_id, user_id) VALUES (%s, %s, %s)",
+                [(event_id, minor_id, adult_id) for adult_id in adult_ids],
+            )
+            return {
+                "id": minor_id,
                 "name": minor_data.name,
                 "age": minor_data.age,
                 "adult_ids": adult_ids,
@@ -223,9 +183,6 @@ class JsonMinorRepository:
                 "restrictions": [],
                 "other_restriction": "",
             }
-            minors.append(minor)
-            self._write_data(data)
-            return minor
 
     def update_minor(
         self,
@@ -234,58 +191,107 @@ class JsonMinorRepository:
         minor_id: int,
         updates: dict[str, object],
     ) -> dict[str, object]:
-        with PLACEHOLDER_LOCK:
-            data = self._read_data()
-            event = self._find_event(data, event_id)
-            self._find_adult_guest(event, user_id)
-            minor = next(
-                (
-                    item for item in self._event_minors(event)
-                    if item.get("id") == minor_id
-                    and user_id in item.get("adult_ids", [])
-                ),
-                None,
+        columns = {"attendance": "attendance", "restrictions": "restrictions", "other_restriction": "other_restriction"}
+        with database_transaction() as (_, cursor):
+            if not self._event_exists(cursor, event_id):
+                raise EventNotFoundError
+            cursor.execute(
+                """
+                SELECT u.id FROM event_guest_profiles AS p
+                JOIN users AS u ON u.id = p.user_id
+                WHERE p.event_id = %s AND p.user_id = %s AND u.role = 'invitado'
+                """,
+                (event_id, user_id),
             )
-            if minor is None:
-                raise MinorNotFoundError
-
+            if cursor.fetchone() is None:
+                raise AdultGuestNotFoundError
+            assignments: list[str] = []
+            parameters: list[object] = []
             for field, value in updates.items():
+                column = columns.get(field)
+                if column is None:
+                    continue
                 if field == "restrictions" and isinstance(value, list):
                     if any(not isinstance(item, str) for item in value):
                         raise ValueError("Las restricciones del menor son inválidas.")
                     value = list(dict.fromkeys(item.strip() for item in value if item.strip()))
                 elif field == "other_restriction" and isinstance(value, str):
                     value = value.strip()
-                minor[field] = value
-            self._write_data(data)
-            return minor
+                assignments.append(f"{column} = %s")
+                parameters.append(json.dumps(value, ensure_ascii=False) if field == "restrictions" else value)
+            if assignments:
+                cursor.execute(
+                    f"""
+                    UPDATE minors AS m
+                    JOIN minor_adults AS ma
+                      ON ma.event_id = m.event_id AND ma.minor_id = m.id
+                    SET {", ".join(assignments)}
+                    WHERE m.event_id = %s AND m.id = %s AND ma.user_id = %s
+                    """,
+                    (*parameters, event_id, minor_id, user_id),
+                )
+            cursor.execute(
+                """
+                SELECT m.id, m.name, m.age, m.attendance, m.restrictions,
+                       m.other_restriction, ma.user_id AS adult_id
+                FROM minors AS m
+                JOIN minor_adults AS ma ON ma.event_id = m.event_id AND ma.minor_id = m.id
+                WHERE m.event_id = %s AND m.id = %s
+                ORDER BY ma.user_id
+                """,
+                (event_id, minor_id),
+            )
+            rows = cursor.fetchall()
+            if not rows or user_id not in [row["adult_id"] for row in rows]:
+                raise MinorNotFoundError
+            return self._group_minors(rows)[0]
 
     def delete_minor(self, event_id: int, user_id: int, minor_id: int) -> dict[str, object]:
-        with PLACEHOLDER_LOCK:
-            data = self._read_data()
-            event = self._find_event(data, event_id)
-            self._find_adult_guest(event, user_id)
-            minors = self._event_minors(event)
-            minor = next(
-                (
-                    item for item in minors
-                    if item.get("id") == minor_id and user_id in item.get("adult_ids", [])
-                ),
-                None,
+        with database_transaction() as (_, cursor):
+            if not self._event_exists(cursor, event_id):
+                raise EventNotFoundError
+            cursor.execute(
+                """
+                SELECT u.id FROM event_guest_profiles AS p
+                JOIN users AS u ON u.id = p.user_id
+                WHERE p.event_id = %s AND p.user_id = %s AND u.role = 'invitado'
+                """,
+                (event_id, user_id),
             )
-            if minor is None:
+            if cursor.fetchone() is None:
+                raise AdultGuestNotFoundError
+            cursor.execute(
+                """
+                SELECT m.id, m.name, m.age, m.attendance, m.restrictions,
+                       m.other_restriction, ma.user_id AS adult_id
+                FROM minors AS m
+                JOIN minor_adults AS ma ON ma.event_id = m.event_id AND ma.minor_id = m.id
+                WHERE m.event_id = %s AND m.id = %s
+                ORDER BY ma.user_id
+                """,
+                (event_id, minor_id),
+            )
+            rows = cursor.fetchall()
+            if not rows or user_id not in [row["adult_id"] for row in rows]:
                 raise MinorNotFoundError
-            adult_ids = minor.get("adult_ids")
-            if not isinstance(adult_ids, list):
-                raise ValueError("La lista de adultos asociados al menor es inválida.")
-            minor["adult_ids"] = [adult_id for adult_id in adult_ids if adult_id != user_id]
-            if not minor["adult_ids"]:
-                minors.remove(minor)
-            self._write_data(data)
+            minor = self._group_minors(rows)[0]
+            cursor.execute(
+                "DELETE FROM minor_adults WHERE event_id = %s AND minor_id = %s AND user_id = %s",
+                (event_id, minor_id, user_id),
+            )
+            cursor.execute(
+                """
+                DELETE m FROM minors AS m
+                LEFT JOIN minor_adults AS ma ON ma.event_id = m.event_id AND ma.minor_id = m.id
+                WHERE m.event_id = %s AND m.id = %s AND ma.minor_id IS NULL
+                """,
+                (event_id, minor_id),
+            )
+            minor["adult_ids"] = [adult_id for adult_id in minor["adult_ids"] if adult_id != user_id]
             return minor
 
 
-minor_repository = JsonMinorRepository(PLACEHOLDER_PATH)
+minor_repository = MySQLMinorRepository()
 
 
 def _handle_error(error: Exception) -> HTTPException:

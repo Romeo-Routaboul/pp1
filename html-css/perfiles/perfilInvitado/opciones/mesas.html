@@ -3,46 +3,103 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mesas - PP1</title>
+    <title>Distribución de mesas - PP1</title>
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-    <h1>Invitados del evento</h1>
-    <p>Esta lista muestra únicamente a las personas asociadas al evento seleccionado.</p>
-    <ul id="lista-invitados"></ul>
-    <p id="mensaje-invitados" role="status" aria-live="polite"></p>
-    <p data-event-status role="status" aria-live="polite"></p>
+    <main class="mesa-app">
+        <h1>Distribución de mesas</h1>
+        <p>Consultá la mesa y el asiento asignados a cada persona de tu evento.</p>
+        <p data-event-status role="status" aria-live="polite"></p>
+        <p id="mensaje-mesas" role="status" aria-live="polite"></p>
+        <section id="lista-mesas" class="lista-mesas" aria-label="Distribución de mesas"></section>
+    </main>
     <footer>
         <a data-event-link href="/perfiles/perfilInvitado/perfil.html">Volver al menú</a>
     </footer>
     <script src="/event-context.js"></script>
     <script>
-        const guestList = document.getElementById("lista-invitados");
-        const message = document.getElementById("mensaje-invitados");
+        const message = document.getElementById("mensaje-mesas");
+        const tableList = document.getElementById("lista-mesas");
 
         if (window.pp1EventId) {
-            loadGuests();
+            loadDistribution();
         }
 
-        async function loadGuests() {
-            message.textContent = "Cargando invitados...";
-            try {
-                const response = await fetch(`/eventos/${encodeURIComponent(window.pp1EventId)}/invitados`);
-                const guests = await response.json();
-                if (!response.ok) {
-                    throw new Error(guests.detail || "No se pudieron cargar los invitados.");
-                }
-
-                guestList.replaceChildren();
-                for (const guest of guests) {
-                    const item = document.createElement("li");
-                    item.textContent = guest.name;
-                    guestList.appendChild(item);
-                }
-                message.textContent = guests.length ? "" : "Todavía no hay invitados para este evento.";
-            } catch (error) {
-                message.textContent = error.message || "No se pudieron cargar los invitados.";
+        async function request(url) {
+            const response = await fetch(url);
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.detail || "No se pudo cargar la distribución.");
             }
+            return result;
+        }
+
+        async function loadDistribution() {
+            message.textContent = "Cargando distribución...";
+            try {
+                const eventId = encodeURIComponent(window.pp1EventId);
+                const [guests, minors, tables] = await Promise.all([
+                    request(`/eventos/${eventId}/invitados`),
+                    request(`/eventos/${eventId}/menores`),
+                    request(`/eventos/${eventId}/mesas`),
+                ]);
+                const guestsById = new Map(
+                    guests
+                        .filter((guest) => Number.isInteger(guest.user_id))
+                        .map((guest) => [guest.user_id, guest]),
+                );
+                const minorsById = new Map(
+                    minors
+                        .filter((minor) => Number.isInteger(minor.id))
+                        .map((minor) => [minor.id, minor]),
+                );
+                tableList.replaceChildren(...tables.map((table) =>
+                    renderTable(table, guestsById, minorsById),
+                ));
+                message.textContent = tables.length
+                    ? ""
+                    : "El anfitrión todavía no publicó la distribución de mesas.";
+            } catch (error) {
+                message.textContent = error.message || "No se pudo cargar la distribución.";
+            }
+        }
+
+        function renderTable(table, guestsById, minorsById) {
+            const panel = document.createElement("article");
+            panel.className = "mesa-panel";
+            const heading = document.createElement("h2");
+            heading.textContent = table.name;
+            const summary = document.createElement("p");
+            summary.textContent = `${table.seat_count} asientos`;
+            const seatList = document.createElement("div");
+            seatList.className = "mesa-asientos";
+            const assignments = new Map(
+                table.assignments.map((assignment) => [assignment.seat_number, assignment]),
+            );
+
+            for (let seatNumber = 1; seatNumber <= table.seat_count; seatNumber += 1) {
+                const seat = document.createElement("div");
+                seat.className = "mesa-asiento";
+                const seatLabel = document.createElement("strong");
+                seatLabel.textContent = `Asiento ${seatNumber}`;
+                const occupant = document.createElement("span");
+                const assignment = assignments.get(seatNumber);
+                if (!assignment) {
+                    occupant.textContent = "Sin asignar";
+                } else if (assignment.minor_id !== null) {
+                    const minor = minorsById.get(assignment.minor_id);
+                    occupant.textContent = minor ? `${minor.name} (menor)` : "Menor asignado";
+                } else {
+                    const guest = guestsById.get(assignment.guest_id);
+                    occupant.textContent = guest ? guest.name : "Invitado asignado";
+                }
+                seat.append(seatLabel, occupant);
+                seatList.appendChild(seat);
+            }
+
+            panel.append(heading, summary, seatList);
+            return panel;
         }
     </script>
 </body>

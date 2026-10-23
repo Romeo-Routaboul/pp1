@@ -3,45 +3,305 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mesas - PP1</title>
+    <title>Organizar mesas - PP1</title>
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-    <h1>Invitados del evento</h1>
-    <p>Esta lista muestra únicamente a las personas asociadas al evento seleccionado.</p>
-    <ul id="lista-invitados"></ul>
-    <p id="mensaje-invitados" role="status" aria-live="polite"></p>
-    <p data-event-status role="status" aria-live="polite"></p>
+    <main class="mesa-app" data-event-required>
+        <h1>Organizar mesas</h1>
+        <p>Creá las mesas de tu evento y asigná un asiento a cada invitado y a sus menores asociados.</p>
+        <p data-event-status role="status" aria-live="polite"></p>
+
+        <button id="mostrar-formulario" type="button">Crear una mesa</button>
+        <form id="formulario-mesa" class="mesa-panel" hidden>
+            <h2>Nueva mesa</h2>
+            <label for="nombre-mesa">Nombre de la mesa</label>
+            <input id="nombre-mesa" name="name" maxlength="80" required>
+            <label for="cantidad-asientos">Cantidad de asientos</label>
+            <input id="cantidad-asientos" name="seat_count" type="number" min="1" max="100" required>
+            <button type="submit">Agregar mesa</button>
+            <button id="cancelar-mesa" type="button">Cancelar</button>
+        </form>
+
+        <p id="mensaje-mesas" role="status" aria-live="polite"></p>
+        <section id="lista-mesas" class="lista-mesas" aria-label="Mesas del evento"></section>
+    </main>
     <footer>
         <a data-event-link href="/perfiles/perfilAnfitrion/perfil.html">Volver al menú</a>
     </footer>
     <script src="/event-context.js"></script>
     <script>
-        const guestList = document.getElementById("lista-invitados");
-        const message = document.getElementById("mensaje-invitados");
+        const message = document.getElementById("mensaje-mesas");
+        const tableList = document.getElementById("lista-mesas");
+        const createForm = document.getElementById("formulario-mesa");
+        const createButton = document.getElementById("mostrar-formulario");
+        const guestsById = new Map();
+        let minors = [];
 
         if (window.pp1EventId) {
-            loadGuests();
+            loadEventData();
         }
 
-        async function loadGuests() {
-            message.textContent = "Cargando invitados...";
+        createButton.addEventListener("click", () => {
+            createForm.hidden = false;
+            document.getElementById("nombre-mesa").focus();
+        });
+
+        document.getElementById("cancelar-mesa").addEventListener("click", () => {
+            createForm.reset();
+            createForm.hidden = true;
+        });
+
+        createForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const formData = new FormData(createForm);
+            const name = formData.get("name").trim();
+            const seatCount = Number(formData.get("seat_count"));
+            if (!name || !Number.isInteger(seatCount) || seatCount < 1 || seatCount > 100) {
+                message.textContent = "Ingresá un nombre y una cantidad de asientos entre 1 y 100.";
+                return;
+            }
+
+            const submitButton = createForm.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
             try {
-                const response = await fetch(`/eventos/${encodeURIComponent(window.pp1EventId)}/invitados`);
-                const guests = await response.json();
-                if (!response.ok) {
-                    throw new Error(guests.detail || "No se pudieron cargar los invitados.");
+                const table = await request(
+                    `/eventos/${encodeURIComponent(window.pp1EventId)}/mesas`,
+                    "POST",
+                    { name, seat_count: seatCount },
+                );
+                createForm.reset();
+                createForm.hidden = true;
+                tableList.appendChild(renderTable(table));
+                updateAllAvailableOptions();
+                message.textContent = `Se creó ${table.name}.`;
+            } catch (error) {
+                message.textContent = error.message;
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+
+        async function request(url, method = "GET", body) {
+            const options = { method, headers: {} };
+            if (body !== undefined) {
+                options.headers["Content-Type"] = "application/json";
+                options.body = JSON.stringify(body);
+            }
+            const response = await fetch(url, options);
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.detail || "No se pudo completar la operación.");
+            }
+            return result;
+        }
+
+        async function loadEventData() {
+            message.textContent = "Cargando invitados y mesas...";
+            try {
+                const eventId = encodeURIComponent(window.pp1EventId);
+                const [guests, eventMinors, tables] = await Promise.all([
+                    request(`/eventos/${eventId}/invitados`),
+                    request(`/eventos/${eventId}/menores`),
+                    request(`/eventos/${eventId}/mesas`),
+                ]);
+                for (const guest of guests) {
+                    if (
+                        ["invitado", "anfitrion"].includes(guest.role) &&
+                        Number.isInteger(guest.user_id)
+                    ) {
+                        guestsById.set(guest.user_id, guest);
+                    }
+                }
+                minors = eventMinors;
+                tableList.replaceChildren(...tables.map(renderTable));
+                updateAllAvailableOptions();
+                message.textContent = tables.length
+                    ? ""
+                    : "Todavía no hay mesas. Usá «Crear una mesa» para agregar la primera.";
+            } catch (error) {
+                message.textContent = error.message || "No se pudieron cargar los datos del evento.";
+            }
+        }
+
+        function occupantOptions() {
+            const options = [];
+            for (const guest of guestsById.values()) {
+                options.push({
+                    value: `guest:${guest.user_id}`,
+                    label: guest.role === "anfitrion" ? `${guest.name} (anfitrión)` : guest.name,
+                });
+            }
+            for (const minor of minors) {
+                const adultNames = (Array.isArray(minor.adult_ids) ? minor.adult_ids : [])
+                    .map((adultId) => guestsById.get(adultId))
+                    .filter((guest) => guest?.role === "invitado")
+                    .map((guest) => guest.name);
+                if (adultNames.length) {
+                    options.push({
+                        value: `minor:${minor.id}`,
+                        label: `${minor.name} (menor asociado a ${adultNames.join(" y ")})`,
+                    });
+                }
+            }
+            return options;
+        }
+
+        function renderTable(table) {
+            const panel = document.createElement("article");
+            panel.className = "mesa-panel";
+            panel.dataset.tableId = table.id;
+            const heading = document.createElement("h2");
+            heading.textContent = table.name;
+            const summary = document.createElement("p");
+            summary.textContent = `${table.seat_count} asientos`;
+            const form = document.createElement("form");
+            const seatList = document.createElement("div");
+            seatList.className = "mesa-asientos";
+            const status = document.createElement("p");
+            status.setAttribute("role", "status");
+            status.setAttribute("aria-live", "polite");
+            const assignments = new Map(
+                table.assignments.map((assignment) => [assignment.seat_number, assignment]),
+            );
+            const selects = [];
+
+            for (let seat = 1; seat <= table.seat_count; seat += 1) {
+                const label = document.createElement("label");
+                label.className = "mesa-asiento";
+                label.textContent = `Asiento ${seat}`;
+                const select = document.createElement("select");
+                select.dataset.seatNumber = seat;
+                const emptyOption = document.createElement("option");
+                emptyOption.value = "";
+                emptyOption.textContent = "Sin asignar";
+                select.appendChild(emptyOption);
+
+                for (const optionData of occupantOptions()) {
+                    const option = document.createElement("option");
+                    option.value = optionData.value;
+                    option.textContent = optionData.label;
+                    select.appendChild(option);
                 }
 
-                guestList.replaceChildren();
-                for (const guest of guests) {
-                    const item = document.createElement("li");
-                    item.textContent = guest.name;
-                    guestList.appendChild(item);
+                const assignment = assignments.get(seat);
+                if (assignment) {
+                    select.value = assignment.minor_id === null
+                        ? `guest:${assignment.guest_id}`
+                        : `minor:${assignment.minor_id}`;
                 }
-                message.textContent = guests.length ? "" : "Todavía no hay invitados para este evento.";
-            } catch (error) {
-                message.textContent = error.message || "No se pudieron cargar los invitados.";
+                select.addEventListener("change", () => updateAvailableOptions(selects));
+                selects.push(select);
+                label.appendChild(select);
+                seatList.appendChild(label);
+            }
+
+            updateAvailableOptions(selects, panel);
+            const saveButton = document.createElement("button");
+            saveButton.type = "submit";
+            saveButton.textContent = "Guardar distribución";
+            form.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                saveButton.disabled = true;
+                status.textContent = "Guardando distribución...";
+                const seatAssignments = [];
+                for (const select of selects) {
+                    if (!select.value) {
+                        continue;
+                    }
+                    const [type, firstId] = select.value.split(":").map((part, index) =>
+                        index === 0 ? part : Number(part),
+                    );
+                    const minor = type === "minor"
+                        ? minors.find((item) => item.id === firstId)
+                        : null;
+                    seatAssignments.push({
+                        seat_number: Number(select.dataset.seatNumber),
+                        guest_id: type === "guest"
+                            ? firstId
+                            : minor.adult_ids.find((adultId) => guestsById.has(adultId)),
+                        minor_id: type === "minor" ? firstId : null,
+                    });
+                }
+
+                try {
+                    const saved = await request(
+                        `/eventos/${encodeURIComponent(window.pp1EventId)}/mesas/${table.id}`,
+                        "PUT",
+                        {
+                            name: table.name,
+                            seat_count: table.seat_count,
+                            assignments: seatAssignments,
+                        },
+                    );
+                    table.assignments = saved.assignments;
+                    status.textContent = "Distribución guardada.";
+                } catch (error) {
+                    status.textContent = error.message;
+                } finally {
+                    saveButton.disabled = false;
+                }
+            });
+            const deleteButton = document.createElement("button");
+            deleteButton.type = "button";
+            deleteButton.textContent = "Eliminar mesa";
+            deleteButton.addEventListener("click", async () => {
+                if (!window.confirm(`¿Querés eliminar la mesa «${table.name}» y su distribución?`)) {
+                    return;
+                }
+                deleteButton.disabled = true;
+                status.textContent = "Eliminando mesa...";
+                try {
+                    await request(
+                        `/eventos/${encodeURIComponent(window.pp1EventId)}/mesas/${table.id}`,
+                        "DELETE",
+                    );
+                    panel.remove();
+                    updateAllAvailableOptions();
+                    message.textContent = `Se eliminó la mesa ${table.name}.`;
+                } catch (error) {
+                    status.textContent = error.message;
+                    deleteButton.disabled = false;
+                }
+            });
+            form.append(seatList, saveButton, status);
+            panel.append(heading, summary, form, deleteButton);
+            return panel;
+        }
+
+        function updateAvailableOptions(selects, panel) {
+            const occupantKey = (value) => {
+                const [type, id] = value.split(":");
+                return type === "minor" ? `minor:${id}` : value;
+            };
+            const selectedInOtherTables = [
+                ...tableList.querySelectorAll(".mesa-panel"),
+            ]
+                .filter((otherPanel) => otherPanel !== panel)
+                .flatMap((otherPanel) => [...otherPanel.querySelectorAll("select")])
+                .map((select) => select.value)
+                .filter(Boolean)
+                .map(occupantKey);
+            for (const select of selects) {
+                const selectedElsewhere = new Set(
+                    selects
+                        .filter((otherSelect) => otherSelect !== select && otherSelect.value)
+                        .map((otherSelect) => occupantKey(otherSelect.value))
+                        .concat(selectedInOtherTables),
+                );
+                for (const option of select.options) {
+                    option.disabled = Boolean(
+                        option.value &&
+                        option.value !== select.value &&
+                        selectedElsewhere.has(occupantKey(option.value)),
+                    );
+                }
+            }
+        }
+
+        function updateAllAvailableOptions() {
+            for (const panel of tableList.querySelectorAll(".mesa-panel")) {
+                updateAvailableOptions([...panel.querySelectorAll("select")], panel);
             }
         }
     </script>
